@@ -32,5 +32,21 @@
 
 <script src="login2.js"></script>
 
+    <script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_KEY",
+  authDomain: "PASTE_YOUR_DOMAIN",
+  projectId: "PASTE_YOUR_PROJECT_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+console.log("Firebase Connected ✅");
+</script>
+    
 </body>
 </html>
