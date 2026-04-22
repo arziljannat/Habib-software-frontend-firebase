@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Revenue Report – Rasson Snooker Academy</title>
+
+    <!-- NAVBAR STYLES -->
+    <link rel="stylesheet" href="../styles/navbar.css">
+
+    <!-- NEON THEME -->
+    <link rel="stylesheet" href="../styles/reports.css"> 
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <div id="navbar-container"></div>
+    <script src="../scripts/load-navbar.js"></script>
+    <script src="../scripts/navbar.js"></script>
+
+    <!-- MAIN REPORT PAGE -->
+    <main class="report-main">
+
+        <div class="report-container">
+
+            <!-- LEFT SIDEBAR -->
+            <aside class="report-sidebar">
+                <h2 class="sidebar-title">📊 Reports</h2>
+
+<button class="report-btn active">Game Income Report</button>
+<button class="report-btn">Canteen Income Report</button>
+            </aside>
+
+            <!-- RIGHT CONTENT AREA -->
+            <section class="report-content">
+
+                <div class="report-panel">
+
+                    <h1>Branch Income Report</h1>
+                    <p class="sub-heading">Select options to filter report</p>
+
+                    <!-- FILTER BAR -->
+                    <div class="filter-row">
+
+                        <div>
+                            <label>From</label><br>
+                            <input type="date" id="fromDate">
+                        </div>
+
+                        <div>
+                            <label>To</label><br>
+                            <input type="date" id="toDate">
+                        </div>
+
+                        <button id="viewReportBtn">Generate Report</button>
+                    </div>
+
+                    <hr>
+
+                    <!-- RESULT AREA -->
+                    <div id="reportOutput" class="output-box">
+                        Select date range and click “View Report”.
+                    </div>
+
+                </div>
+            </section>
+
+        </div>
+
+    </main>
+
+    <!-- JS FILE -->
+    <script src="../scripts/reports.js"></script>
+
+</body>
+</html>

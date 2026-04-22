@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Inventory</title>
+
+    <!-- MAIN THEME -->
+     <link rel="stylesheet" href="../styles/navbar.css">
+    <link rel="stylesheet" href="../styles/inventory.css">
+
+    <!-- NAVBAR LOADER -->
+    <script src="../scripts/load-navbar.js" defer></script>
+
+    <!-- INVENTORY LOGIC -->
+    <script src="../scripts/inventory.js" defer></script>
+</head>
+
+<body>
+
+    <div class="page-container">
+
+        <h1 class="page-title">Inventory</h1>
+
+        <div class="top-actions">
+            <button class="btn-green" onclick="openAddPopup()">+ Add New Item</button>
+        </div>
+
+        <div class="table-box">
+            <table class="inv-table">
+                <thead>
+                    <tr>
+                        <th>Item</th>
+                        <th>Qty</th>
+                        <th>Cost Price</th>
+                        <th>Selling Price</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="inventoryBody"></tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <!-- ADD POPUP -->
+    <div id="addPopup" class="popup hide">
+        <div class="popup-card">
+            <h2>Add Item</h2>
+
+            <input id="newName" class="popup-input" placeholder="Item Name">
+            <input id="newQty" type="number" class="popup-input" placeholder="Quantity">
+            <input id="newCost" type="number" class="popup-input" placeholder="Cost Price">
+            <input id="newSell" type="number" class="popup-input" placeholder="Selling Price">
+
+            <div class="popup-actions">
+                <button class="btn-green" onclick="saveNewItem()">Save</button>
+                <button class="btn-red" onclick="closeAddPopup()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- EDIT POPUP -->
+    <div id="editPopup" class="popup hide">
+        <div class="popup-card">
+            <h2>Edit Item</h2>
+
+            <input id="editName" class="popup-input">
+            <input id="editQty" type="number" class="popup-input">
+            <input id="editCost" type="number" class="popup-input">
+            <input id="editSell" type="number" class="popup-input">
+
+            <div class="popup-actions">
+                <button class="btn-green" onclick="updateItem()">Update</button>
+                <button class="btn-red" onclick="closeEditPopup()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- DELETE POPUP -->
+    <div id="deletePopup" class="popup hide">
+        <div class="popup-card">
+            <h2>Delete Item?</h2>
+            <p>This action cannot be undone.</p>
+
+            <div class="popup-actions">
+                <button class="btn-red" onclick="confirmDelete()">Delete</button>
+                <button class="btn-green" onclick="closeDeletePopup()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

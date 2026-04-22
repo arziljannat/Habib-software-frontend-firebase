@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Users – Rasson Snooker Academy</title>
+
+    <!-- STYLES -->
+    <link rel="stylesheet" href="../styles/navbar.css">
+    <link rel="stylesheet" href="../styles/users.css">
+
+    <!-- ROLE SYSTEM -->
+    <script src="../scripts/role-access.js"></script>
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <div id="navbar-container"></div>
+    <script src="../scripts/load-navbar.js"></script>
+    <script src="../scripts/navbar.js"></script>
+
+    <!-- PAGE TITLE -->
+    <h2 class="users-title">Users</h2>
+
+    <!-- ADD NEW USER -->
+    <div class="add-user-wrapper admin-only">
+        <button class="green-btn" onclick="openAddUser()">+ Add New User</button>
+    </div>
+
+    <!-- USERS TABLE -->
+    <div class="users-table-wrapper">
+        <table class="users-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Role</th>
+                    <th>Status</th>
+                    <th>Created At</th>
+                    <th class="admin-only">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="usersBody"></tbody>
+        </table>
+    </div>
+
+
+    <!-- ADD USER POPUP -->
+    <div id="addUserPopup" class="popup hidden">
+        <div class="popup-content">
+            <h2>Add User</h2>
+
+            <label>Username</label>
+            <input id="newUsername" class="popup-input" />
+
+            <label>Password</label>
+            <input id="newPassword" type="password" class="popup-input" />
+
+<label>Role</label>
+<select id="newRole" class="popup-input">
+    <option value="admin">Admin</option>
+    <option value="staff">Staff</option>
+</select>
+
+            <label>Status</label>
+            <select id="newStatus" class="popup-input">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+
+            <div class="popup-actions">
+                <button class="green-btn" onclick="saveNewUser()">Save</button>
+                <button class="red-btn" onclick="closeAddUser()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- EDIT USER POPUP -->
+    <div id="editUserPopup" class="popup hidden">
+        <div class="popup-content">
+            <h2>Edit User</h2>
+
+            <label>Username</label>
+            <input id="editUsername" class="popup-input" />
+
+            <label>Password (optional)</label>
+            <input id="editPassword" type="password" class="popup-input" />
+
+           <label>Role</label>
+<select id="editRole" class="popup-input">
+    <option value="admin">Admin</option>
+    <option value="staff">Staff</option>
+</select>
+
+            <label>Status</label>
+            <select id="editStatus" class="popup-input">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+
+            <div class="popup-actions">
+                <button class="green-btn" onclick="updateUser()">Update</button>
+                <button class="red-btn" onclick="closeEditUser()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- DELETE USER POPUP -->
+    <div id="deleteUserPopup" class="popup hidden">
+        <div class="popup-content">
+            <h2>Delete User?</h2>
+            <p>Are you sure you want to delete this user?</p>
+
+            <div class="popup-actions">
+                <button class="green-btn" onclick="confirmDeleteUser()">Yes</button>
+                <button class="red-btn" onclick="closeDeleteUser()">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- USERS JS -->
+    <script src="../scripts/users.js"></script>
+</body>
+</html>

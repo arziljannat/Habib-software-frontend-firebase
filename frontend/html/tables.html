@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tables Management</title>
+
+    <link rel="stylesheet" href="../styles/navbar.css">
+    <link rel="stylesheet" href="../styles/tables.css">
+
+    
+</head>
+
+<body>
+
+<div id="navbar-container"></div>
+<script src="../scripts/load-navbar.js"></script>
+<script src="../scripts/navbar.js"></script>
+
+<div class="page-top-area">
+    <h1 class="tables-heading">Tables Management</h1>
+
+    <button id="addTableBtn" class="neon-btn add-table-btn">+ Add New Table</button>
+    <button id="shiftCloseBtn" class="neon-btn add-table-btn">Shift 1 Close</button>
+    <button id="dayHistoryBtn" class="neon-btn add-table-btn">Day History</button>
+    <button id="tableHistoryBtn" class="neon-btn add-table-btn">Table History</button>
+</div>
+
+<div id="tablesContainer" class="tables-grid"></div>
+
+
+<!-- ADD TABLE POPUP -->
+<div id="addTablePopup" class="popup hidden">
+    <div class="popup-box">
+        <h2>Add New Table</h2>
+
+        <label>Table Name:</label>
+        <input id="tableNameInput" type="text">
+
+        <label>Frame Rate:</label>
+        <input id="frameRateInput" type="number">
+
+        <label>Century Rate:</label>
+        <input id="centuryRateInput" type="number">
+
+        <div class="popup-buttons">
+            <button id="createTableBtn" class="neon-btn">Create</button>
+            <button id="cancelAddBtn" class="neon-btn red">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- DELETE POPUP -->
+<div id="deletePopup" class="popup hidden">
+    <div class="popup-box">
+        <h2>Delete Table</h2>
+        <p>Are you sure you want to delete this table?</p>
+        <div class="popup-buttons">
+            <button id="confirmDeleteBtn" class="neon-btn red">Delete</button>
+            <button id="cancelDeleteBtn" class="neon-btn">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- EDIT POPUP -->
+<div id="editTablePopup" class="popup hidden">
+    <div class="popup-box">
+        <h2>Edit Table</h2>
+
+        <label>Table Name:</label>
+        <input id="editTableName" type="text">
+
+        <label>Frame Rate:</label>
+        <input id="editFrameRate" type="number">
+
+        <label>Century Rate:</label>
+        <input id="editCenturyRate" type="number">
+
+        <div class="popup-buttons">
+            <button id="saveEditBtn" class="neon-btn">Save</button>
+            <button id="cancelEditBtn" class="neon-btn red">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- BILL POPUP -->
+<div id="billPopup" class="popup hidden">
+    <div class="popup-box">
+
+<div id="billDetails" class="bill-print-box"></div>
+
+
+        <div class="popup-buttons">
+            <button id="paidBtn" class="neon-btn">Paid</button>
+            <button id="cancelBillBtn" class="neon-btn red">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- CANTEEN POPUP -->
+<div id="canteenPopup" class="popup hidden">
+    <div class="popup-box">
+        <h2>Canteen</h2>
+        <div id="canteenList"></div>
+
+        <div class="popup-buttons">
+            <button id="closeCanteenBtn" class="neon-btn red">Close</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- HISTORY POPUP -->
+<div id="historyPopup" class="popup hidden">
+    <div class="popup-box large-popup">
+        <h2>Table History</h2>
+
+        <table class="history-table">
+            <thead>
+            <tr>
+                <th>#</th>
+                <th>Check-in</th>
+                <th>Checkout</th>
+                <th>Play</th>
+                <th>Rate</th>
+                <th>Amount</th>
+                <th>Canteen</th>
+                <th>Total</th>
+                <th>Paid</th>
+            </tr>
+            </thead>
+            <tbody id="historyTableBody"></tbody>
+        </table>
+
+        <div class="pagination">
+            <button onclick="prevPage()" class="neon-btn">Prev</button>
+            <span id="pageNumber">1</span>
+            <button onclick="nextPage()" class="neon-btn">Next</button>
+        </div>
+
+        <div class="popup-buttons">
+            <button id="closeHistoryBtn" class="neon-btn red">Close</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- SHIFT SUMMARY POPUP (NEW FULL SUMMARY) -->
+<div id="shiftSummaryPopup" class="popup hidden">
+    <div class="popup-box large-popup">
+        <h2 id="shiftSummaryTitle">Shift Summary</h2>
+
+        <table class="history-table neon-table">
+            <thead>
+                <tr>
+                    <th>Shift</th>
+                    <th>Game Total</th>
+                    <th>Canteen Total</th>
+                    <th>Game Collection</th>
+                    <th>Canteen Collection</th>
+                    <th>Game Balance</th>
+                    <th>Canteen Balance</th>
+                    <th>Expenses</th>
+                    <th>Closing Cash</th>
+                    <th>Open Time</th>
+                    <th>Close Time</th>
+                </tr>
+            </thead>
+
+            <tbody id="shiftSummaryBody"></tbody>
+        </table>
+
+        <div class="popup-buttons">
+            <button id="confirmShiftCloseBtn" class="neon-btn">Close Shift</button>
+            <button id="cancelShiftSummaryBtn" class="neon-btn red">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- DAY HISTORY POPUP -->
+<div id="dayHistoryPopup" class="popup hidden">
+    <div class="popup-box large-popup">
+        <h2>Day History</h2>
+
+        <label>Select Day Range:</label>
+        <select id="dayHistoryDateSelect"></select>
+        <p id="dayHistoryBranch"></p>
+
+        <h3>Shift 1 Summary</h3>
+        <table class="history-table neon-table">
+            <tbody id="dayShift1Body"></tbody>
+        </table>
+
+        <h3>Shift 2 Summary</h3>
+        <table class="history-table neon-table">
+            <tbody id="dayShift2Body"></tbody>
+        </table>
+
+        <h3>Combined</h3>
+        <table class="history-table neon-table">
+            <tbody id="dayCombinedBody"></tbody>
+        </table>
+
+        <div class="popup-buttons">
+            <button id="printDayHistoryBtn" class="neon-btn">Print</button>
+            <button id="cancelDayHistoryBtn" class="neon-btn red">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- TABLE HISTORY POPUP -->
+<div id="tableHistoryPopup" class="popup hidden">
+    <div class="popup-box large-popup">
+        <h2>Table History</h2>
+
+        <label>Select Day Range:</label>
+        <select id="tableHistoryDateSelect"></select>
+
+        <label>Select Table:</label>
+        <select id="tableHistoryTableSelect"></select>
+        <p id="tableHistoryBranch"></p>
+
+        <h3>Shift 1</h3>
+        <table class="history-table neon-table">
+            <tbody id="tableShift1Body"></tbody>
+        </table>
+
+        <h3>Shift 2</h3>
+        <table class="history-table neon-table">
+            <tbody id="tableShift2Body"></tbody>
+        </table>
+
+        <h3>Combined</h3>
+        <table class="history-table neon-table">
+            <tbody id="tableCombinedBody"></tbody>
+        </table>
+
+        <div class="popup-buttons">
+            <button id="printTableHistoryBtn" class="neon-btn">Print</button>
+            <button id="cancelTableHistoryBtn" class="neon-btn red">Cancel</button>
+        </div>
+    </div>
+</div>
+    <!-- SHIFT TABLE POPUP -->
+    <div id="shiftTablePopup" class="popup hidden">
+        <div class="popup-content">
+            <h3>Shift Table</h3>
+
+            <label>Select Free Table:</label>
+            <select id="shiftTableSelect"></select>
+
+            <div class="popup-buttons">
+                <button id="confirmShiftTableBtn" class="neon-btn green">Confirm</button>
+                <button id="cancelShiftTableBtn" class="neon-btn red">Cancel</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ✅ STEP 1: SOCKET LIB -->
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+<!-- ✅ STEP 2: TABLES JS -->
+<script src="../scripts/tables.js"></script>
+    
+</body>
+</html>

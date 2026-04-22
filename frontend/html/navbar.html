@@ -1,0 +1,34 @@
+<div class="navbar">
+
+    <div class="top-title">Rasson Snooker Academy</div>
+
+    <div class="nav-wrapper">
+
+        <button class="nav-btn" data-page="dashboard" onclick="goTo('dashboard')">Dashboard</button>
+        <button class="nav-btn" data-page="tables" onclick="goTo('tables')">Tables</button>
+        <button class="nav-btn" data-page="expenses" onclick="goTo('expenses')">Expenses</button>
+
+        <button class="nav-btn admin-only" data-page="inventory" onclick="goTo('inventory')">Inventory</button>
+        <button class="nav-btn admin-only" data-page="reports" onclick="goTo('reports')">Reports</button>
+        <button class="nav-btn admin-only" data-page="users" onclick="goTo('users')">Users</button>
+
+        <!-- BRANCH SELECTOR (Admin-only) -->
+<select id="branchSelect" class="nav-select admin-only">
+<option value="Rasson1">Rasson 1</option>
+<option value="Rasson2">Rasson 2</option>
+<option value="Rasson3">Rasson 3</option>
+<option value="Rasson4">Rasson 4</option>
+<option value="Rasson5">Rasson 5</option>
+<option value="Rasson6">Rasson 6</option>
+<option value="Rasson7">Rasson 7</option>
+<option value="Rasson8">Rasson 8</option>
+</select>
+
+        <!-- FIXED LOGOUT BUTTON -->
+        <button id="logoutBtn" class="logout-btn">Logout</button>
+
+    </div>
+
+    <div class="glow-line"></div>
+
+</div>

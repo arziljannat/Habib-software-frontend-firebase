@@ -1,0 +1,94 @@
+:root { --neon:#5DFF4A; }
+
+body {
+    margin:0;
+    padding:0;
+    font-family:Arial;
+    background:url("assets/background.jpg") center/cover fixed no-repeat;
+    color:var(--neon);
+}
+
+body::before{
+    content:"";
+    position:fixed;
+    top:0;left:0;
+    width:100%;height:100%;
+    background:rgba(0,0,0,0.55);
+    z-index:-1;
+}
+
+.dh-title {
+    text-align:center;
+    font-size:32px;
+    margin-top:25px;
+    text-shadow:0 0 14px var(--neon);
+}
+
+/* FILTER */
+.dh-filter-box{
+    width:90%;
+    margin:25px auto;
+    display:flex;
+    gap:18px;
+    flex-wrap:wrap;
+    justify-content:center;
+}
+
+.dh-field label{
+    display:block;
+    margin-bottom:6px;
+    color:var(--neon);
+}
+
+.dh-field input,
+.dh-field select{
+    padding:10px;
+    border-radius:8px;
+    background:#000;
+    border:1px solid var(--neon);
+    color:var(--neon);
+    box-shadow:0 0 10px var(--neon);
+}
+
+.dh-green-btn{
+    padding:12px 22px;
+    background:transparent;
+    border:1px solid var(--neon);
+    color:var(--neon);
+    border-radius:8px;
+    cursor:pointer;
+    font-weight:bold;
+    box-shadow:0 0 14px var(--neon);
+}
+.dh-green-btn:hover{
+    background:var(--neon);
+    color:black;
+}
+
+/* SUMMARY BLOCKS */
+.dh-block{
+    width:90%;
+    margin:20px auto;
+    padding:25px;
+    border:2px solid var(--neon);
+    border-radius:14px;
+    background:rgba(0,0,0,0.55);
+    box-shadow:0 0 25px var(--neon);
+}
+
+.dh-block h3{
+    font-size:26px;
+    text-shadow:0 0 14px var(--neon);
+    margin-bottom:15px;
+}
+
+.dh-block p{
+    margin:10px 0;
+    font-size:18px;
+    display:flex;
+    justify-content:space-between;
+}
+
+.total-block{
+    box-shadow:0 0 35px var(--neon);
+}

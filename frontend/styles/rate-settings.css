@@ -1,0 +1,111 @@
+:root {
+    --neon: #5DFF4A;
+}
+
+body {
+    margin: 0;
+    font-family: Arial;
+    background: #000;
+    color: var(--neon);
+}
+
+/* Navbar same as tables */
+.navbar {
+    width: 100%;
+    height: 80px;
+    background: rgba(0,0,0,0.88);
+    border-bottom: 2px solid var(--neon);
+    box-shadow: 0 0 20px var(--neon);
+
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 25px;
+}
+
+.navbar-title {
+    font-size: 26px;
+    font-weight: bold;
+    text-shadow: 0 0 18px var(--neon);
+}
+
+.menu-row {
+    display: flex;
+    gap: 14px;
+}
+
+.menu-btn {
+    padding: 10px 22px;
+    background: transparent;
+    border: 1px solid var(--neon);
+    color: var(--neon);
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 12px var(--neon);
+}
+
+.menu-btn.active,
+.menu-btn:hover {
+    background: rgba(93,255,74,0.25);
+}
+
+.logout-btn {
+    background: red;
+    color: white;
+    padding: 9px 18px;
+    border-radius: 6px;
+    font-weight: bold;
+    box-shadow: 0 0 14px red;
+}
+
+/* Page Title */
+.page-title {
+    text-align: center;
+    margin-top: 30px;
+    font-size: 28px;
+    text-shadow: 0 0 14px var(--neon);
+}
+
+/* Settings Box */
+.settings-container {
+    width: 400px;
+    margin: 40px auto;
+    background: rgba(0,0,0,0.7);
+    padding: 25px;
+    border: 2px solid var(--neon);
+    border-radius: 14px;
+    box-shadow: 0 0 16px var(--neon);
+}
+
+label {
+    display: block;
+    margin-top: 15px;
+    font-size: 18px;
+    text-shadow: 0 0 8px var(--neon);
+}
+
+input {
+    width: 90%;
+    padding: 12px;
+    margin-top: 6px;
+    background: #000;
+    border: 1px solid var(--neon);
+    border-radius: 10px;
+    color: var(--neon);
+    text-align: center;
+    box-shadow: inset 0 0 8px var(--neon);
+}
+
+.save-btn {
+    margin-top: 20px;
+    width: 100%;
+    padding: 12px;
+    background: var(--neon);
+    color: #000;
+    font-weight: bold;
+    border-radius: 10px;
+    cursor: pointer;
+    border: none;
+    box-shadow: 0 0 16px var(--neon);
+}

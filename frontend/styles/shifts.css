@@ -1,0 +1,131 @@
+:root {
+    --neon: #00ff9d;
+    --neon-soft: #00ffcc;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: url("../assets/background.jpeg") no-repeat center center fixed;
+    background-size: cover;
+    color: var(--neon-soft);
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.55);
+    z-index: -1;
+}
+
+/* PAGE TITLE */
+.shift-title {
+    text-align: center;
+    font-size: 38px;
+    color: var(--neon-soft);
+    margin-top: 25px;
+    text-shadow: 0 0 18px var(--neon-soft);
+    position: relative;
+    z-index: 99;
+}
+
+/* SHIFT BUTTON GRID */
+.shift-buttons-wrapper {
+    width: 90%;
+    margin: 25px auto;
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    flex-wrap: wrap;
+}
+
+.shift-box {
+    width: 260px;
+    padding: 20px;
+    border-radius: 14px;
+    background: rgba(0,0,0,0.40);
+    border: 2px solid var(--neon);
+    box-shadow: 0 0 22px var(--neon);
+    text-align: center;
+}
+
+.shift-box h3 {
+    margin-bottom: 12px;
+    font-size: 22px;
+    color: var(--neon);
+    text-shadow: 0 0 16px var(--neon);
+}
+
+/* GREEN BUTTON */
+.green-btn {
+    padding: 12px 22px;
+    border-radius: 10px;
+    background: var(--neon);
+    color: black;
+    font-weight: bold;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 0 20px var(--neon);
+}
+
+.green-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 32px var(--neon);
+}
+
+/* POPUP */
+.popup {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+}
+
+.hidden {
+    display: none;
+}
+
+.popup-content {
+    width: 420px;
+    background: rgba(0,0,0,0.90);
+    padding: 25px;
+    border-radius: 16px;
+    border: 2px solid var(--neon);
+    box-shadow: 0 0 28px var(--neon);
+    text-align: center;
+}
+
+.popup-content h2 {
+    color: var(--neon);
+    font-size: 26px;
+    margin-bottom: 12px;
+    text-shadow: 0 0 16px var(--neon);
+}
+
+.popup-actions {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-top: 20px;
+}
+
+/* RED BUTTON */
+.red-btn {
+    padding: 12px 22px;
+    background: red;
+    color: black;
+    border: none;
+    border-radius: 10px;
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 0 18px red;
+}
+
+.red-btn:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 28px red;
+}

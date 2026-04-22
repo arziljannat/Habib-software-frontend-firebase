@@ -1,0 +1,512 @@
+/* ============================================================
+   GLOBAL PAGE STYLE
+============================================================ */
+body {
+    margin: 0;
+    padding: 0;
+    background: url("../assets/login.jpg") no-repeat center center fixed;
+    background-size: cover;
+    font-family: Arial, sans-serif;
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.55);
+    z-index: 0;
+}
+
+body * {
+    position: relative;
+    z-index: 2;
+}
+
+.page-top-area {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.tables-heading {
+    color: #00ffcc;
+    font-size: 30px;
+    margin-bottom: 15px;
+}
+
+
+/* ============================================================
+   TOP BUTTONS
+============================================================ */
+.add-table-btn {
+    margin: 0 5px;
+    padding: 10px 20px;
+}
+
+.neon-btn {
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid #00ff88;
+    color: #00ffcc;
+    padding: 8px 17px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 15px;
+    transition: 0.25s;
+    box-shadow: 0 0 10px #00ff88, inset 0 0 10px #00ff88;
+}
+
+.neon-btn:hover {
+    background: #00ff88;
+    color: black;
+}
+
+.neon-btn.red {
+    border-color: #ff4444;
+    color: #ff9999;
+    box-shadow: 0 0 10px #ff4444, inset 0 0 10px #ff4444;
+}
+
+.neon-btn.red:hover {
+    background: #ff4444;
+    color: black;
+}
+
+
+/* ============================================================
+   TABLE GRID
+============================================================ */
+.tables-grid {
+    width: 90%;
+    margin: 30px auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 25px;
+}
+
+
+/* ============================================================
+   TABLE CARD
+============================================================ */
+.table-box {
+    background: rgba(0, 0, 0, 0.25);
+    border: 2px solid #00ff88;
+    border-radius: 12px;
+    padding: 15px;
+    width: 330px;
+    box-shadow: 0 0 15px #00ff88, inset 0 0 15px #00ff88;
+}
+
+.table-title {
+    text-align: center;
+    font-size: 22px;
+    color: #00ffcc;
+    font-weight: bold;
+}
+
+
+/* RATE SELECT */
+.rate-selector {
+    text-align: center;
+    margin: 10px 0;
+}
+
+.rate-selector select {
+    padding: 6px;
+    background: rgba(0,0,0,0.3);
+    border: 2px solid #00ff88;
+    color: #00ffcc;
+    border-radius: 8px;
+    box-shadow: 0 0 10px #00ff88;
+}
+
+
+/* TIMER BOX */
+.timer-box {
+    background: rgba(0, 0, 0, 0.25);
+    padding: 10px;
+    border-radius: 10px;
+    border: 2px solid #00ff88;
+    margin-bottom: 10px;
+}
+
+.timer-line {
+    display: flex;
+    justify-content: space-between;
+    font-size: 14px;
+    color: #ccffee;
+    margin: 3px 0;
+}
+
+.timer-line span:last-child {
+    color: #00ffdd;
+    font-weight: bold;
+}
+
+
+/* ACTION BUTTON ROWS */
+.table-actions {
+    text-align: center;
+}
+
+.big-btn-row {
+    margin-bottom: 10px;
+}
+
+.big-btn {
+    width: 90%;
+    margin: 5px 0;
+}
+
+.dual-btn-row {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.second-row {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+}
+
+.small-btn {
+    padding: 5px 12px;
+    font-size: 13px;
+}
+
+
+/* ============================================================
+   POPUPS
+============================================================ */
+.popup {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(7px);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.popup-box {
+    background: rgba(0, 0, 0, 0.75);
+    border: 2px solid #00ff88;
+    padding: 20px;
+    border-radius: 15px;
+    width: 400px;
+    color: #ccffee;
+    box-shadow: 0 0 20px #00ff88, inset 0 0 15px #00ff88;
+}
+
+.large-popup {
+    width: 900px !important;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.popup-box input,
+.popup-box select {
+    width: 100%;
+    padding: 10px;
+    background: rgba(0,0,0,0.3);
+    border: 2px solid #00ff88;
+    border-radius: 10px;
+    margin-bottom: 15px;
+    color: #aaffee;
+}
+
+.popup-buttons {
+    text-align: center;
+    margin-top: 10px;
+}
+
+.popup-buttons button {
+    margin: 0 8px;
+}
+
+
+/* ============================================================
+   TABLES IN POPUPS
+============================================================ */
+.history-table,
+.neon-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0;
+    font-size: 14px;
+}
+
+.history-table th,
+.neon-table th {
+    border-bottom: 2px solid #00ff88;
+    padding: 8px;
+    color: #00ffcc;
+}
+
+.history-table td,
+.neon-table td {
+    border-bottom: 1px solid #00ff8860;
+    padding: 8px;
+    color: #ccffee;
+}
+
+
+/* ============================================================
+   RESPONSIVE
+============================================================ */
+@media (max-width: 1200px) {
+    .tables-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .tables-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 600px) {
+    .tables-grid {
+        grid-template-columns: repeat(1, 1fr);
+    }
+
+    .table-box {
+        width: 95%;
+    }
+}
+
+
+
+
+#shiftTablePopup .popup-content {
+    width: 380px;
+    padding: 25px;
+}
+
+#shiftTableSelect {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #00ff9d;
+    border-radius: 8px;
+    background: #060606fc;
+    color: #00ff9d;
+    margin-bottom: 20px;
+}
+
+
+/* UNIVERSAL POPUP CENTER FIX */
+.popup {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    background: lab(0% 0 0 / 0.65);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
+}
+
+.popup.hidden {
+    display: none !important;
+}
+
+/* POPUP CONTENT CENTER BOX */
+.popup-content {
+    background: rgba(0, 0, 0, 0.95);
+    padding: 30px;
+    border-radius: 15px;
+    border: 2px solid #00ff9d;
+    box-shadow: 0 0 25px #00ff9d;
+    min-width: 350px;
+    max-width: 400px;
+    color:#aaffee;
+    text-align: center;
+}
+
+/* Paid / Unpaid buttons */
+.paid-btn {
+    background: #00ff88;
+    color: black;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: default;
+}
+
+.unpaid-btn {
+    background: #ff4444;
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+
+
+
+/* THERMAL BILL STYLE */
+.bill-print-box {
+    font-size: 15px;
+    line-height: 22px;
+    text-align: center;      /* center entire content */
+    width: 260px;            /* 58mm thermal */
+    margin: auto;
+}
+
+.bill-print-box p {
+    margin: 3px 0;
+}
+
+.bill-print-box .title {
+    font-size: 18px;
+    font-weight: bold;
+}
+
+/* -------- THERMAL BILL (80mm printer) -------- */
+
+@media print {
+
+    body {
+        margin: 0;
+        padding: 0;
+        background: white !important;
+    }
+
+@media print {
+    .popup-box {
+        padding: 0 !important;
+        margin: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+        background: white !important;
+        width: auto !important;
+    }
+
+    .popup {
+        background: transparent !important;
+    }
+}
+
+
+    #billDetails {
+        width: 280px !important;      /* 80mm ka actual print width */
+        padding: 0;
+        margin: 0 auto;               /* center on print */
+        text-align: center;
+        font-size: 12px;              /* receipt font */
+        line-height: 16px;
+    }
+
+    .bill-print-box {
+        width: 280px !important;      /* IMPORTANT */
+        margin: 0 auto;
+        padding: 10px 0;
+        text-align: center;
+    }
+
+    .bill-print-box img {
+        display: block;
+        margin: 5px auto;
+    }
+
+    .bill-print-box hr {
+        margin: 4px 0;
+        border: none;
+        border-top: 1px dashed #000;
+    }
+
+    /* Remove everything except bill during print */
+    body * {
+        visibility: hidden;
+        display: none;
+    }
+
+    #billPopup, #billPopup * {
+        visibility: visible;
+         display: block !important;
+    }
+
+    #billPopup {
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+}
+
+@media print {
+    .bill-print-box * {
+        color: #000 !important;
+        font-weight: 900 !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+}
+
+
+/* HIDE ALL BUTTONS INSIDE BILL POPUP ON PRINT */
+@media print {
+    .popup-buttons,
+    #paidBtn,
+    #cancelBillBtn {
+        display: none !important;
+    }
+
+    /* popup background bhi hide */
+    .popup {
+        background: transparent !important;
+        box-shadow: none !important;
+    }
+
+    .popup-box {
+        box-shadow: none !important;
+        border: none !important;
+    }
+
+}
+
+.bill-print-box p.title {
+    font-size: 25px !important;
+    font-weight: 800 !important;
+}
+
+.bill-print-box p:nth-of-type(2) {
+    font-size: 20px !important;
+    font-weight: 600 !important;
+}
+
+@media print {
+    html, body {
+        width: 80mm !important;   /* Thermal printer width set */
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #billPopup {
+        width: 80mm !important;       /* force popup width */
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    #billDetails, .bill-print-box {
+        width: 72mm !important;       /* perfect content width */
+        margin: 0 auto !important;
+        padding: 0 !important;
+        page-break-after: avoid !important;
+        page-break-before: avoid !important;
+    }
+}
+
+.bill-separator {
+    width: 100%;
+    border-top: 1px dashed #000;
+    margin: 6px 0;
+}
+

@@ -1,0 +1,121 @@
+/* MAIN PAGE */
+body {
+    margin: 0;
+    padding: 0;
+    background: url('../assets/background.jpeg') no-repeat center center fixed;
+    background-size: cover;
+    font-family: Arial, sans-serif;
+}
+
+.report-main {
+    margin-top: 90px;
+    padding: 25px;
+}
+
+.report-container {
+    display: grid;
+    grid-template-columns: 260px auto;
+    gap: 25px;
+}
+
+/* SIDEBAR */
+.report-sidebar {
+    background: rgba(0, 0, 0, 0.40);
+    border: 2px solid #00ff9d;
+    box-shadow: 0 0 20px #00ff9d;
+    border-radius: 15px;
+    padding: 20px;
+    height: 500px;
+}
+
+.sidebar-title {
+    color: #00ffcc;
+    font-size: 22px;
+    margin-bottom: 20px;
+}
+
+.report-btn {
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #00ffcc;
+    border: 2px solid #00ff9d;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.report-btn.active,
+.report-btn:hover {
+    background: rgba(0, 255, 200, 0.25);
+    box-shadow: 0 0 15px #00ffcc;
+}
+
+/* RIGHT PANEL */
+.report-content {
+    padding: 10px;
+}
+
+.report-panel {
+    background: rgba(0, 0, 0, 0.40);
+    border: 2px solid #00ff9d;
+    box-shadow: 0 0 20px #00ff9d;
+    border-radius: 15px;
+    padding: 25px;
+}
+
+.report-panel h1 {
+    color: #00ffcc;
+    margin-bottom: 5px;
+}
+
+.sub-heading {
+    color: #00ffaa;
+    margin-bottom: 20px;
+}
+
+/* FILTER ROW */
+.filter-row {
+    display: flex;
+    align-items: center;
+    gap: 25px;
+    margin-bottom: 20px;
+}
+
+.filter-row label {
+    color: #00ffaa;
+}
+
+.filter-row input {
+    padding: 6px 10px;
+    border-radius: 8px;
+    border: 2px solid #00ff9d;
+    background: rgba(0, 0, 0, 0.35);
+    color: #00ffcc;
+}
+
+.filter-row button {
+    padding: 10px 18px;
+    background: #00ff9d;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.filter-row button:hover {
+    box-shadow: 0 0 20px #00ffcc;
+}
+
+/* OUTPUT BOX */
+.output-box {
+    margin-top: 20px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 2px solid #00ff9d;
+    border-radius: 15px;
+    padding: 25px;
+    color: #00ffcc;
+    min-height: 200px;
+    box-shadow: inset 0 0 12px #00ffcc;
+}

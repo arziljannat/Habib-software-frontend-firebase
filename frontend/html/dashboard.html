@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rasson Dashboard</title>
+
+    <link rel="stylesheet" href="../styles/navbar.css">
+    <link rel="stylesheet" href="../styles/dashboard.css">
+
+    <script src="../scripts/chart.min.js"></script>
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <div id="navbar-container"></div>
+    <script src="../scripts/load-navbar.js"></script>
+    <script src="../scripts/navbar.js"></script>
+
+
+    <!-- ========================= -->
+    <!-- MAIN STATS (VISIBLE TO ALL) -->
+    <!-- ========================= -->
+    <div class="stats-container">
+
+        <div class="stat-box">
+            <h3>Total Tables</h3>
+            <p id="totalTables">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Active</h3>
+            <p id="activeTables">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Free</h3>
+            <p id="freeTables">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Today Sessions</h3>
+            <p id="todaySessions">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Completed</h3>
+            <p id="completedSessions">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Time Income</h3>
+            <p id="timeIncome">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Canteen</h3>
+            <p id="canteenIncome">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Total Income</h3>
+            <p id="totalIncome">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Unpaid Bills</h3>
+            <p id="unpaidBills">0</p>
+        </div>
+
+        <div class="stat-box">
+            <h3>Paid Bills</h3>
+            <p id="paidBills">0</p>
+        </div>
+
+        <!-- ========================= -->
+        <!-- ADMIN ONLY -->
+        <!-- ========================= -->
+
+        <div class="stat-box admin-only">
+            <h3>Monthly Income</h3>
+            <p id="monthlyIncome">0</p>
+        </div>
+
+        <div class="stat-box admin-only">
+            <h3>Session Avg</h3>
+            <p id="sessionAverage">0</p>
+        </div>
+
+        <div class="stat-box admin-only">
+            <h3>Monthly Expense</h3>
+            <p id="monthlyExpense">0</p>
+        </div>
+
+        <div class="stat-box admin-only">
+            <h3>Net Profit</h3>
+            <p id="netProfit">0</p>
+        </div>
+    
+
+    </div>
+
+
+    <!-- ========================= -->
+    <!-- CHARTS (ADMIN ONLY) -->
+    <!-- ========================= -->
+    <div class="charts-container">
+
+        <div class="chart-box admin-only">
+            <h3 class="chart-title">Income Summary</h3>
+            <canvas id="incomeChart"></canvas>
+        </div>
+
+        <div class="chart-box admin-only">
+            <h3 class="chart-title">Bills Summary</h3>
+            <canvas id="billsChart"></canvas>
+        </div>
+
+    </div>
+
+
+    <script src="../scripts/dashboard.js"></script>
+
+</body>
+</html>

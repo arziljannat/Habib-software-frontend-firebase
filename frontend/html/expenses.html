@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Expenses</title>
+
+    <!-- NAVBAR CSS -->
+    <link rel="stylesheet" href="../styles/navbar.css">
+
+    <!-- PAGE CSS -->
+    <link rel="stylesheet" href="../styles/expenses.css">
+
+    <!-- NAVBAR LOADER -->
+    <script src="../scripts/load-navbar.js" defer></script>
+
+    <!-- PAGE SCRIPT -->
+    <script src="../scripts/expenses.js" defer></script>
+</head>
+
+<body>
+
+    <div class="page-container">
+
+        <h1 class="page-title">Expenses</h1>
+
+        <!-- TOP FILTER -->
+        <div class="filter-row">
+            <label class="filter-label">Expense Type:</label>
+            <select id="filterType" class="filter-select" onchange="filterByType()">
+                <option value="all">All</option>
+                <option value="daily">Daily</option>
+                <option value="monthly">Monthly</option>
+            </select>
+        </div>
+
+        <div class="top-actions">
+            <button class="btn-green" onclick="openAddPopup()">+ Add Expense</button>
+
+            <input 
+                type="text" 
+                id="searchInput"
+                class="search-bar"
+                placeholder="Search..."
+                onkeyup="searchExpenses()"
+            >
+        </div>
+
+        <div class="total-box">
+            <span>Today's Total:</span>
+            <b id="todayTotal">0 PKR</b>
+        </div>
+
+        <div class="table-box">
+            <table class="exp-table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Amount</th>
+                        <th>Type</th>
+                        <th>Date & Time</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="expensesBody"></tbody>
+            </table>
+        </div>
+
+    </div>
+
+<!-- ADD EXPENSE POPUP -->
+<div id="addPopup" class="popup hide">
+    <div class="popup-card">
+        <h2>Add Expense</h2>
+
+        <label class="lbl">Expense Type</label>
+        <select id="newType" class="popup-input">
+            <option value="daily">Daily</option>
+            <option value="monthly">Monthly</option>
+        </select>
+
+        <input id="newTitle" class="popup-input" placeholder="Expense Title">
+        <input id="newAmount" type="number" class="popup-input" placeholder="Amount">
+
+        <div class="popup-actions">
+            <button class="btn-green" onclick="saveExpense()">Save</button>
+            <button class="btn-red" onclick="closeAddPopup()">Cancel</button>
+        </div>
+    </div>
+</div>
+
+
+<!-- EDIT EXPENSE POPUP -->
+<div id="editPopup" class="popup hide">
+    <div class="popup-card">
+        <h2>Edit Expense</h2>
+
+        <label class="lbl">Expense Type</label>
+        <select id="editType" class="popup-input">
+            <option value="daily">Daily</option>
+            <option value="monthly">Monthly</option>
+        </select>
+
+        <input id="editTitle" class="popup-input">
+        <input id="editAmount" type="number" class="popup-input">
+
+        <div class="popup-actions">
+            <button class="btn-green" onclick="updateExpense()">Update</button>
+            <button class="btn-red" onclick="closeEditPopup()">Cancel</button>
+        </div>
+    </div>
+</div>
+
