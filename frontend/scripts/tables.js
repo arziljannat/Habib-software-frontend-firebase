@@ -1,136 +1,46 @@
-const socket = io("https://snooker-backend-pmjj.onrender.com");
-socket.on("connect", () => {
-    console.log("✅ SOCKET CONNECTED:", socket.id);
-});
+import {
+  collection,
+  addDoc,
+  getDocs,
+  updateDoc,
+  doc,
+  query,
+  where,
+  onSnapshot,
+  deleteDoc
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+import { increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+let expensesArr = JSON.parse(localStorage.getItem("expenses") || "[]");
+
 
 const BRANCH = localStorage.getItem("branch");
+
+let inventoryItems = [];
+
 // 🔥 HELPER FUNCTIONS (ADD AT TOP)
 function getItemName(item) {
     return item.item_name || item.name || "Unknown Item";
 }
 
 function getItemStock(item) {
-    return item.quantity || item.stock || 0;
+    return item.stock || 0;
 }
 
 
-let pendingQueue = JSON.parse(localStorage.getItem("pendingQueue") || "[]");
 
-function saveQueue() {
-    localStorage.setItem("pendingQueue", JSON.stringify(pendingQueue));
-}
-async function sendToServer(url, data) {
 
-    // offline save
-    if (!navigator.onLine) {
-        pendingQueue.push({ url, data });
-        saveQueue();
-        return;
-    }
 
-    try {
-        await fetch(url, {
-            method: url.includes("update-rate") ? "PUT" : "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "branch": BRANCH
-            },
-            body: JSON.stringify(data)
-        });
-    } catch (err) {
-        // fallback offline queue
-        pendingQueue.push({ url, data });
-        saveQueue();
-    }
-}
-
-// change rate function
-async function updateRate(table_id, frame_rate, century_rate) {
-    try {
-
-        console.log("SENDING:", {
-            table_id,
-            frame_rate,
-            century_rate,
-            branch: BRANCH
-        });
-
-        await sendToServer(
-    "https://snooker-backend-pmjj.onrender.com/api/tables/update-rate",
-    {
-        table_id,
-        frame_rate,
-        century_rate,
-        branch: BRANCH
-    }
-);
-        let t = tables.find(x => String(x.id) === String(table_id));
-if (t) {
-    t.frameRate = frame_rate;
-    t.centuryRate = century_rate;
-}
-
-// ❌ REMOVE loadTablesFromServer
-
-// ❌ REMOVE render & restore here
-
-saveState(); // only save
-
-// UI will update via socket (REAL SOURCE)
-
-    } catch (err) {
-        console.error("Rate update error:", err);
-    }
-}
-
-socket.on("table-rate-updated", (data) => {
-
-    if (data.branch !== BRANCH) return;
-
-    console.log("⚡ RATE UPDATE:", data);
-
-    let t = tables.find(x => String(x.id) === String(data.table_id));
-
-    if (!t) return;
-
-    // ✅ DIRECT UPDATE (NO RELOAD)
-    t.frameRate = Number(data.frame_rate);
-    t.centuryRate = Number(data.century_rate);
-
-    // 🔥 IMPORTANT: force playType sync
-    if (t.playType === "frame") {
-        t.playType = "frame";
-    } else {
-        t.playType = "century";
-    }
-
-    updateDisplay(t.id);
-
-// 🔥 BUTTON STATE FIX (VERY IMPORTANT)
-if (t.isRunning) {
-    updateButtons(t.id, "running");
-}
-else if (t.afterCheckout) {
-    updateButtons(t.id, "afterCheckout");
-}
-else {
-    updateButtons(t.id, "idle");
-}
-
-// ❌ DO NOT FULL RENDER
-// renderTables();  ❌ REMOVE THIS
-});
 
 /******************************************************
  * GLOBAL DATA + LOCALSTORAGE SETUP
  ******************************************************/
 let tables = [];
-let shift1 = JSON.parse(localStorage.getItem("shift1") || "null");
-let shift2 = JSON.parse(localStorage.getItem("shift2") || "null");
-let dayRanges = JSON.parse(localStorage.getItem("dayRanges") || "[]");
-let editTargetId = null;
-let deleteTargetId = null;
 
+let shift1 = null;   // ✅ ADD
+let shift2 = null;   // ✅ ADD
+
+let editTargetId = null;
 let afterCheckoutMap = JSON.parse(localStorage.getItem("afterCheckoutMap") || "{}");
 
 function saveAfterCheckout() {
@@ -166,143 +76,157 @@ function saveState() {
 /******************************************************
  * PAGE LOAD INITIALIZER
  ******************************************************/
+
 document.addEventListener("DOMContentLoaded", async () => {
+    // 🔥 RESTORE SHIFT STATE
+let savedShift1 = localStorage.getItem("shift1Data");
+if (savedShift1) {
+    shift1 = JSON.parse(savedShift1);
+    document.getElementById("shiftCloseBtn").innerText = "Shift 2 Close";
+}
 
-    await loadTablesFromServer();
+let savedShift2 = localStorage.getItem("shift2Data");
+if (savedShift2) {
+    shift2 = JSON.parse(savedShift2);
+    document.getElementById("shiftCloseBtn").innerText = "Day Close";
+}
 
-    renderTables();
-    restoreTimers();
+    listenInventoryRealtime();
+    listenTablesRealtime();
 
     bindAddTablePopup();
     bindShiftButtons();
     bindHistoryButtons();
+
+    setTimeout(() => {
+        restoreTimers();
+    }, 500);
+
+    // ❌ OLD METHOD REMOVE
+    // await restoreRunningTables();
+
+    // ✅ NEW REALTIME METHOD ADD
+    listenRunningSessionsRealtime();
+
 });
 
-async function loadTablesFromServer() {
-    try {
-const branch = (BRANCH || "").trim();
+  function listenInventoryRealtime() {
 
-console.log("TABLES PAGE BRANCH:", branch);
-
-if (!branch) {
-    alert("Session expired — please login again");
-    window.location.href = "../index.html";
-    return;
-}
-
-const currentDayId = localStorage.getItem("currentDayId");
-
-const res = await fetch(
-  `https://snooker-backend-pmjj.onrender.com/api/tables?branch=${branch}`
-);
-
-const data = await res.json();
-
-// 🔥 SAFE HANDLING
-const tableList = Array.isArray(data) ? data : data.tables || [];
-const sessions = data.sessions || [];
-
-const runningIds = sessions.map(s => s.table_id);
-
-const uniqueTables = {};
-
-tableList.forEach(t => {
-    uniqueTables[t.table_id] = t;
-});
-let newTables = Object.values(uniqueTables).map(t => {
-
-    let session = (data.sessions || []).find(
-        s => String(s.table_id) === String(t.table_id)
+    const q = query(
+        collection(window.db, "inventory"),
+        where("branch", "==", BRANCH)
     );
 
-    // 🔥 ADD THIS LINE
-    let existing = tables.find(x => String(x.id) === String(t.table_id));
+    onSnapshot(q, (snapshot) => {
+
+        inventoryItems = [];
+
+        snapshot.forEach(docSnap => {
+            inventoryItems.push({
+                id: docSnap.id,
+                ...docSnap.data()
+            });
+        });
+
+        console.log("🔥 REALTIME INVENTORY:", inventoryItems);
+    });
+}
+
+function listenTablesRealtime() {
+
+    const q = query(
+        collection(window.db, "tables"),
+        where("branch", "==", BRANCH)
+    );
+
+    onSnapshot(q, (snapshot) => {
+        let prevTables = [...tables]; // 🔥 ADD THIS LINE
+
+        let newTables = [];
+
+        snapshot.forEach(docSnap => {
+
+    const t = docSnap.data();
+
+    console.log("🔥 FIREBASE DATA:", t); // ✅ ADD KIYA
+
+    newTables.push({
+        id: docSnap.id,
+        name: t.table_id || "Table 1",
+
+                frameRate: Number(t.frame_rate || 8),
+                centuryRate: Number(t.century_rate || 10),
+
+            playType: t.play_type || "frame",
+                isRunning: false,
+                checkinTime: null,
+                checkoutTime: null,
+
+                playSeconds: 0,
+                liveAmount: 0,
+
+                canteenTotal: 0,
+                canteenItems: {},
+
+                history: []
+            });
+        });
+
+        // 🔥 overwrite tables
+        tables = newTables.map(nt => {
+
+    let old = prevTables.find(o => String(o.id) === String(nt.id));
 
     return {
-        id: t.table_id,
-        name: t.table_id,
+        ...nt,
 
-playType: session
-    ? session.play_type
-    : "frame",
+        // 🔥 KEEP FIREBASE NAME
+        name: nt.name,
 
-        frameRate: Number(t.frame_rate || 8),
-centuryRate: Number(t.century_rate || 10),
-    
+        // 🔥 PRESERVE RUNNING STATE
+        // 🔥 DO NOT RESET RUNNING STATE FROM OLD
+isRunning: old?.isRunning ?? nt.isRunning ?? false,
+checkinTime: old?.checkinTime ?? nt.checkinTime ?? null,
+checkoutTime: old?.checkoutTime ?? nt.checkoutTime ?? null,
+playSeconds: old?.playSeconds ?? 0,
+liveAmount: old?.liveAmount ?? 0,
+        // 🔥 MOST IMPORTANT FIX
+        playType: old?.isRunning ? old.playType : nt.playType,
+        frameRate: old?.isRunning ? old.frameRate : nt.frameRate,
+        centuryRate: old?.isRunning ? old.centuryRate : nt.centuryRate,
 
-        isRunning: runningIds.includes(t.table_id),
-
-        afterCheckout: afterCheckoutMap[t.table_id] || false,
-        finalAmount: finalAmountMap[t.table_id] || 0,
-        finalSeconds: finalSecondsMap[t.table_id] || 0,
-
-        checkinTime: session
-            ? new Date(session.start_time).getTime()
-            : checkinTimeMap[String(t.table_id)] || null,
-
-        checkoutTime: session && session.end_time
-            ? new Date(session.end_time).getTime()
-            : checkoutTimeMap[String(t.table_id)] || null,
-
-        playSeconds: 0,
-        liveAmount: 0,
-        canteenTotal: 0,
-        canteenItems: {},
-        history: []
+        // 🔥 KEEP CANTEEN + HISTORY
+        canteenTotal: old?.canteenTotal || 0,
+        canteenItems: old?.canteenItems || {},
+        history: old?.history || []
     };
 });
 
-// 🔥 SAFE MERGE (CRITICAL)
-newTables.forEach(nt => {
-
-    let existing = tables.find(t => String(t.id) === String(nt.id));
-
- if (existing && existing.isRunning) {
-    nt.checkinTime = existing.checkinTime;
-    nt.playSeconds = existing.playSeconds;
-    nt.canteenTotal = existing.canteenTotal;
-    nt.canteenItems = existing.canteenItems;
-    nt.afterCheckout = existing.afterCheckout;
-
-    // ❌ REMOVE THIS LINE (VERY IMPORTANT)
-    // nt.liveAmount = existing.liveAmount;
+        // 🔥 render UI
+        renderTables();
+    });
 }
-});
 
-tables = newTables;
-// ✅ HISTORY LOAD FROM NEW API
-const historyRes = await fetch(
-  "https://snooker-backend-pmjj.onrender.com/api/tables/history/all"
-);
+// inventory load function
+async function loadInventory() {
 
-const historyData = await historyRes.json();
+    const q = query(
+        collection(window.db, "inventory"),
+        where("branch", "==", BRANCH)
+    );
 
-const dayStartTime = Number(localStorage.getItem("dayStartTime") || 0); // ✅ ADD
+    const snap = await getDocs(q);
 
-historyData.forEach(s => {
+    inventoryItems = [];
 
-    if (new Date(s.start_time).getTime() < dayStartTime) return;
-
-    let t = tables.find(x => String(x.id) === String(s.table_id));
-
-    if (t) {
-        t.history.push({
-            checkin: new Date(s.start_time).getTime(),
-            checkout: new Date(s.end_time).getTime(),
-            playSeconds: (s.total_minutes || 0) * 60,
-            rate: s.frame_rate,
-            amount: s.total_amount,
-            canteenAmount: 0,
-            total: s.total_amount,
-            paid: true
+    snap.forEach(docSnap => {
+        inventoryItems.push({
+            id: docSnap.id,
+            ...docSnap.data()
         });
-    }
-});
+    });
 
-    } catch (err) {
-        console.error("LOAD TABLES ERROR:", err);
-        loadDefaultTables(); // fallback
-    }
+    console.log("🔥 INVENTORY LOADED:", inventoryItems);
 }
 
 /******************************************************
@@ -310,17 +234,14 @@ historyData.forEach(s => {
  ******************************************************/
 function bindAddTablePopup() {
 
-    // popup open
     document.getElementById("addTableBtn").onclick = () => {
         document.getElementById("addTablePopup").classList.remove("hidden");
     };
 
-    // popup close
     document.getElementById("cancelAddBtn").onclick = () => {
         document.getElementById("addTablePopup").classList.add("hidden");
     };
 
-    // create table
     document.getElementById("createTableBtn").onclick = async () => {
 
         let name = document.getElementById("tableNameInput").value.trim();
@@ -329,30 +250,13 @@ function bindAddTablePopup() {
 
         if (!name) return alert("Enter table name");
 
-let res = await fetch("https://snooker-backend-pmjj.onrender.com/api/tables/create", {
-    method: "POST",
-headers: {
-  "Content-Type": "application/json",
-  "branch": BRANCH
-},
-body: JSON.stringify({
-    table_id: name,
-    frame_rate: Number(frame) || 8,
-    century_rate: Number(cen) || 10,
-    branch: BRANCH
-})
-});
-
-let data = await res.json();
-
-// ✅ ERROR HANDLE
-if (!res.ok) {
-    alert(data.message || "Error creating table");
-    return;
-}
-
-        await loadTablesFromServer();
-        renderTables();
+        // 🔥 FIREBASE SAVE
+        await addDoc(collection(window.db, "tables"), {
+            table_id: name,
+            frame_rate: Number(frame) || 8,
+            century_rate: Number(cen) || 10,
+            branch: BRANCH
+        });
 
         document.getElementById("addTablePopup").classList.add("hidden");
     };
@@ -396,7 +300,31 @@ function renderTables() {
     const box = document.getElementById("tablesContainer");
     box.innerHTML = "";
 
-    tables.forEach(t => {
+    // 🔥 SORT TABLES + ROOMS PROPER ORDER
+const sortedTables = [...tables].sort((a, b) => {
+
+    const getType = (name) => {
+        if (name.toLowerCase().startsWith("table")) return 1;
+if (name.toLowerCase().startsWith("room")) return 2;
+        return 3;
+    };
+
+    const typeA = getType(a.name);
+    const typeB = getType(b.name);
+
+    // 🔹 pehle Table → phir Room
+    if (typeA !== typeB) return typeA - typeB;
+
+    // 🔹 number sort (Table 1, Table 2...)
+    const numA = parseInt(a.name.match(/\d+/)) || 0;
+    const numB = parseInt(b.name.match(/\d+/)) || 0;
+
+    return numA - numB;
+});
+
+
+// 🔥 AB LOOP CHANGE KARO
+sortedTables.forEach(t => {
 
         const div = document.createElement("div");
         div.classList.add("table-box");
@@ -452,13 +380,33 @@ Century (${t.centuryRate})
         `;
 
         box.appendChild(div);
+        // 🔥 AFTER RENDER → APPLY STATE
+setTimeout(() => {
+
+    tables.forEach(t => {
+
+        updateDisplay(t.id);
+
+        if (t.afterCheckout) {
+            updateButtons(t.id, "afterCheckout");
+        }
+        else if (t.isRunning) {
+            updateButtons(t.id, "running");
+        }
+        else {
+            updateButtons(t.id, "idle");
+        }
+
+    });
+
+}, 50);
     });
 }
 
 /******************************************************
  * CHANGE RATE
  ******************************************************/
-function changeRate(id, rateType, value) {
+async function changeRate(id, rateType, value) {
 
     let table = tables.find(t => String(t.id) === String(id));
     if (!table) return;
@@ -472,18 +420,18 @@ function changeRate(id, rateType, value) {
         table.playType = "century";
     }
 
-    updateRate(
-        table.id,
-        table.frameRate,
-        table.centuryRate
-    );
-
-    // ✅ UI UPDATE YAHAN HOGA (CORRECT PLACE)
     updateDisplay(id);
 
     if (table.isRunning) {
         updateButtons(id, "running");
     }
+
+    // 🔥 SAVE TO FIREBASE
+    await updateDoc(doc(window.db, "tables", id), {
+        play_type: table.playType,
+        frame_rate: table.frameRate,
+        century_rate: table.centuryRate
+    });
 }
 function handleRateChange(id, select) {
     const value = select.value;
@@ -491,6 +439,7 @@ function handleRateChange(id, select) {
     const [type, rate] = value.split("-");
 
     changeRate(id, type, rate);
+
 }
 /******************************************************
  * CHECK-IN FUNCTION
@@ -498,47 +447,59 @@ function handleRateChange(id, select) {
 async function checkIn(id) {
     let t = tables.find(x => String(x.id) === String(id));
 
- if (t.isRunning) {
-    console.log("Already running - ignore");
-    return;
-}
-  
+    if (t.isRunning) return;
 
     t.isRunning = true;
     t.checkinTime = Date.now();
+
     checkinTimeMap[id] = t.checkinTime;
-saveCheckinTime();
+    saveCheckinTime();
+
     t.afterCheckout = false;
+    // 🔥 AGAR PREVIOUS BILL UNPAID HAI → VIEW BILL HIDE
+updateButtons(id, "idle");
     delete afterCheckoutMap[id];
-saveAfterCheckout();
+    saveAfterCheckout();
+
     t.checkoutTime = null;
     t.playSeconds = 0;
-
     t.liveAmount = 0;
     t.canteenTotal = 0;
-    t.canteenItems = {}; // 🔥 ADD THIS LINE
+    t.canteenItems = {};
 
     updateButtons(id, "running");
     runTimer(id);
     saveState();
 
-await fetch("https://snooker-backend-pmjj.onrender.com/api/tables/start", {
-    method: "POST",
-   headers: {
-  "Content-Type": "application/json",
-  "branch": BRANCH
-},
-    body: JSON.stringify({
-        table_id: id,
-        frame_rate: t.frameRate,
-        century_rate: t.centuryRate,
-        play_type: t.playType || "frame",
-        branch: BRANCH
-    })
-});
+// 🔥 STEP 1: check if already running session exists
+const q = query(
+    collection(window.db, "sessions"),
+    where("table_id", "==", t.name),
+    where("branch", "==", BRANCH),
+    where("end_time", "==", null)
+);
 
+const snap = await getDocs(q);
+
+// 🔥 STEP 2: if exists → DO NOT create new
+if (!snap.empty) {
+    console.log("⚠️ Session already exists, skipping new check-in");
+    return;
 }
 
+// 🔥 STEP 3: create new session
+await addDoc(collection(window.db, "sessions"), {
+    table_id: t.name,
+    branch: BRANCH,
+
+    start_time: new Date().toISOString(),
+    end_time: null,
+
+    play_type: t.playType,
+    frame_rate: t.frameRate,
+    century_rate: t.centuryRate
+});
+}
 
 
 
@@ -547,90 +508,77 @@ await fetch("https://snooker-backend-pmjj.onrender.com/api/tables/start", {
  ******************************************************/
 async function checkOut(id) {
 
-    let btn = document.getElementById(`checkoutBtn-${id}`);
-    if (btn) btn.disabled = true;
-
     let t = tables.find(x => String(x.id) === String(id));
 
-    // 🔒 DOUBLE CLICK PROTECTION
-    if (t._stopping) {
-        if (btn) btn.disabled = false;
-        return;
-    }
+    t.isRunning = false;
 
-    t._stopping = true;
+// 🔥 FINAL FREEZE (IMPORTANT)
+t.afterCheckout = true;
+t.isRunning = false; // 🔥 FORCE STOP
+t.checkoutTime = Date.now();
 
-    try {
-        // 🔒 UI FREEZE (temporary)
-        t.isRunning = false;
-        t.afterCheckout = true;
+t.finalSeconds = t.playSeconds;
+t.finalAmount = t.liveAmount;   // ✅ ADD THIS HERE
 
-        t.checkoutTime = Date.now();
-        t.finalSeconds = t.playSeconds;
+    afterCheckoutMap[id] = true;
+    checkoutTimeMap[id] = t.checkoutTime;
+    finalSecondsMap[id] = t.finalSeconds;
 
-        // ✅ SAVE LOCAL STATE (only UI purpose)
-        afterCheckoutMap[id] = true;
-        checkoutTimeMap[id] = t.checkoutTime;
-        finalSecondsMap[id] = t.finalSeconds;
+    saveAfterCheckout();
+    saveCheckoutTime();
+    saveFinalSeconds();
 
-        saveAfterCheckout();
-        saveCheckoutTime();
-        saveFinalSeconds();
+    // 🔥 FIREBASE UPDATE
+    const q = query(
+        collection(window.db, "sessions"),
+        where("table_id", "==", t.name),
+        where("branch", "==", BRANCH),
+        where("end_time", "==", null)
+    );
 
-        // ❌ NO HISTORY PUSH HERE (IMPORTANT FIX)
+    const snap = await getDocs(q);
 
-        // 🔥 API CALL
-        const res = await fetch("https://snooker-backend-pmjj.onrender.com/api/tables/stop", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "branch": BRANCH
-            },
-            body: JSON.stringify({
-                table_id: id
-            })
-        });
+    snap.forEach(async (d) => {
+        await updateDoc(doc(window.db, "sessions", d.id), {
+    end_time: new Date().toISOString(),
 
-        const data = await res.json();
-        console.log("STOP RESPONSE:", data);
+    // 🔥 FINAL BILL SAVE
+    final_amount: t.finalAmount,
+    final_seconds: t.finalSeconds,
+    canteen_total: t.canteenTotal
+});
+    });
 
-        if (data && data.success) {
+    // 🔥 FINAL AMOUNT SAVE
+    finalAmountMap[id] = t.finalAmount;
+    saveFinalAmount();
 
-            // ✅ FINAL AMOUNT FROM BACKEND ONLY
-            t.finalAmount = Number(data.total);
+    // 🔥 HISTORY SAVE (CORRECT PLACE)
+    t.history.push({
+        checkin: t.checkinTime,
+        checkout: t.checkoutTime,
+        playSeconds: t.finalSeconds,
+        rate: t.playType === "century" ? t.centuryRate : t.frameRate,
+        amount: t.liveAmount,
+        canteenAmount: t.canteenTotal,
+        total: t.liveAmount + t.canteenTotal,
+        paid: false,
+        canteenItems: JSON.parse(JSON.stringify(t.canteenItems))
+    });
 
-            finalAmountMap[id] = t.finalAmount;
-            saveFinalAmount();
+    saveState();
 
-            // 🔥 UI UPDATE
-            updateButtons(id, "afterCheckout");
-            updateDisplay(id);
-
-            // 🔥 FULL SYNC FROM BACKEND (MOST IMPORTANT)
-            await loadTablesFromServer();
-            renderTables();
-            restoreTimers();
-        }
-
-    } catch (err) {
-        console.error("CHECKOUT ERROR:", err);
-    }
-
-    finally {
-        t._stopping = false;
-
-        if (btn) btn.disabled = false;
-    }
+    updateButtons(id, "afterCheckout");
+    updateDisplay(id);
 }
-
-
-
 /******************************************************
  * TIMER — (1 SEC = 1 MIN CHARGE FIX)
  ******************************************************/
 function runTimer(id) {
     let t = tables.find(x => String(x.id) === String(id));
-    if (!t || !t.isRunning) return;
+
+    // 🔥 FREEZE FIX
+    if (!t || !t.isRunning || t.afterCheckout) return;
 
     t.playSeconds = Math.floor((Date.now() - t.checkinTime) / 1000);
 
@@ -654,8 +602,11 @@ function updateDisplay(id) {
     document.getElementById(`checkout-${id}`).innerText = t.checkoutTime ? formatTime(t.checkoutTime) : "--:--:--";
     document.getElementById(`playtime-${id}`).innerText =
     formatSeconds(t.afterCheckout ? t.finalSeconds : t.playSeconds);
-    document.getElementById(`amount-${id}`).innerText =
-    (t.afterCheckout ? t.finalAmount : t.liveAmount) + t.canteenTotal;
+    let amount = t.afterCheckout
+    ? (t.finalAmount + t.canteenTotal)
+    : (t.liveAmount + t.canteenTotal);
+
+document.getElementById(`amount-${id}`).innerText = amount;
     let itemsHTML = "";
 
 Object.values(t.canteenItems).forEach(item => {
@@ -699,6 +650,10 @@ function updateButtons(id, mode) {
     let canteenBtn = document.getElementById(`canteenBtn-${id}`);
     let shiftBtn = document.getElementById(`shiftBtn-${id}`);
 
+    let t = tables.find(x => String(x.id) === String(id));
+    let last = t.history[t.history.length - 1];
+
+    // 🔥 RUNNING MODE
     if (mode === "running") {
 
         checkInBtn.classList.add("hidden");
@@ -711,12 +666,15 @@ function updateButtons(id, mode) {
 
         canteenBtn.classList.remove("hidden");
         shiftBtn.classList.remove("hidden");
+
+        return;
     }
-    else if (mode === "afterCheckout") {
+
+    // 🔥 AFTER CHECKOUT MODE
+    if (mode === "afterCheckout") {
 
         checkInBtn.classList.add("hidden");
         checkOutBtn.classList.add("hidden");
-        afterRow.classList.remove("hidden");
 
         histBtn.classList.remove("hidden");
         editBtn.classList.remove("hidden");
@@ -724,19 +682,29 @@ function updateButtons(id, mode) {
 
         canteenBtn.classList.add("hidden");
         shiftBtn.classList.add("hidden");
-    }
-    else {
-        checkInBtn.classList.remove("hidden");
-        checkOutBtn.classList.add("hidden");
-        afterRow.classList.add("hidden");
 
-        histBtn.classList.remove("hidden");
-        editBtn.classList.remove("hidden");
-        delBtn.classList.remove("hidden");
+        // 🔥 LOGIC
+        if (last && !last.paid) {
+            afterRow.classList.remove("hidden"); // VIEW BILL SHOW
+        } else {
+            afterRow.classList.add("hidden");
+            checkInBtn.classList.remove("hidden"); // CHECKIN SHOW
+        }
 
-        canteenBtn.classList.add("hidden");
-        shiftBtn.classList.add("hidden");
+        return;
     }
+
+    // 🔥 IDLE MODE
+    checkInBtn.classList.remove("hidden");
+    checkOutBtn.classList.add("hidden");
+    afterRow.classList.add("hidden");
+
+    histBtn.classList.remove("hidden");
+    editBtn.classList.remove("hidden");
+    delBtn.classList.remove("hidden");
+
+    canteenBtn.classList.add("hidden");
+    shiftBtn.classList.add("hidden");
 }
 /******************************************************
  * BILL POPUP — SHOW BILL FOR A TABLE
@@ -744,20 +712,6 @@ function updateButtons(id, mode) {
 async function showBill(id) {
 
     let t = tables.find(x => String(x.id) === String(id));
-
-    let canteenItemsFromDB = [];
-
-    try {
- const branch = BRANCH;
-
-const res = await fetch(
-  `https://snooker-backend-pmjj.onrender.com/api/tables/canteen-items/${t.id}?branch=${branch}`
-);
-        const data = await res.json();
-        canteenItemsFromDB = data || [];
-    } catch (err) {
-        console.error("Canteen items fetch error:", err);
-    }
 
     let academy = localStorage.getItem("academyName") || "Rasson Snooker Academy";
     let branch = BRANCH || "Rasson1";
@@ -768,66 +722,70 @@ const res = await fetch(
 
     let bill = document.getElementById("billDetails");
 
-    // ✅ CANTEEN BUILD
     let canteenDetails = "";
     let canteenTotal = 0;
 
-    canteenItemsFromDB.forEach(item => {
-        let total = Number(item.price) * Number(item.quantity);
+    Object.values(t.canteenItems || {}).forEach(item => {
+        let total = item.qty * item.price;
         canteenTotal += total;
 
-        canteenDetails += `
-            <p style="margin:2px 0;">
-                ${item.name} &nbsp;&nbsp; ${item.quantity}
-            </p>
-        `;
+        canteenDetails += `<p>${item.name} x${item.qty}</p>`;
     });
 
-    if (!canteenDetails) {
-        canteenDetails = `<p>No items</p>`;
-    }
+    if (!canteenDetails) canteenDetails = `<p>No items</p>`;
 
     let gameAmount = t.finalAmount || t.liveAmount;
 
-    // ✅ FINAL BILL HTML
     bill.innerHTML = `
-    <div class="bill-print-box">
+<div style="width:300px; margin:auto; font-family:monospace; color:#000; background:#fff; padding:15px; border-radius:10px;">
 
-        <img src="../assets/bill-logo.png" style="width:200px;">
+    <center>
+    <img src="../assets/bill-logo.png" style="width:120px; margin-bottom:5px;">
+    <h3 style="margin:0;">${academy}</h3>
+    <small>${branch}</small>
+</center>
 
-        <p><b>${academy}</b></p>
-        <p>${branch}</p>
+    <hr>
 
-        <hr>
+    <p><b>Table:</b> ${t.name}</p>
+    <p><b>Check-in:</b> ${checkin}</p>
+    <p><b>Checkout:</b> ${checkout}</p>
+    <p><b>Play Time:</b> ${playtime}</p>
 
-        <p><b>${t.name}</b></p>
+    <hr>
 
-        <hr>
+    <p><b>Game Charges</b></p>
+    <p>Rs ${gameAmount}</p>
 
-        <p>Check-in: ${checkin}</p>
-        <p>Checkout: ${checkout}</p>
-        <p>Play Time: ${playtime}</p>
+    <hr>
 
-        <hr>
+    <p><b>Canteen</b></p>
+    ${Object.values(t.canteenItems || {}).map(item => `
+        <div style="display:flex; justify-content:space-between;">
+            <span>${item.name} x${item.qty}</span>
+            <span>${item.qty * item.price}</span>
+        </div>
+    `).join("") || "<p>No items</p>"}
 
-        <p>Game: Rs ${gameAmount}</p>
-        <p>Canteen: Rs ${canteenTotal}</p>
+    <hr>
 
-        <hr>
-
-        <p><b>Total: Rs ${gameAmount + canteenTotal}</b></p>
-
-        <hr>
-
-        <p><b>Canteen Items:</b></p>
-        ${canteenDetails}
-
-        <hr>
-
-        <p>Thanks for visit</p>
-
+    <div style="display:flex; justify-content:space-between;">
+        <b>Total</b>
+        <b>Rs ${gameAmount + canteenTotal}</b>
     </div>
-    `;
+
+    <hr>
+
+    <hr>
+
+<center>
+    <img src="../assets/QR-bill.png" style="width:100px;">
+    <br>
+    <small>Scan & Pay</small>
+</center>
+
+</div>
+`;
 
     document.getElementById("billPopup").classList.remove("hidden");
 
@@ -839,36 +797,20 @@ const res = await fetch(
 function completePayment(id) {
 
     let t = tables.find(x => String(x.id) === String(id));
-    t.afterCheckout = false;   // ✅ reset after payment
-    delete finalAmountMap[id];
-saveFinalAmount();
-    delete checkinTimeMap[id];
-saveCheckinTime();
-    delete afterCheckoutMap[id];
-saveAfterCheckout();
+    if (!t || !t.history.length) return;
 
-    // Find last history entry (latest checkout)
     let last = t.history[t.history.length - 1];
 
-    if (!last) {
-        alert("No bill found.");
-        return;
-    }
-
-    // Mark as paid
     last.paid = true;
 
     saveState();
 
-    // Auto print bill
-    window.print();
-
-    // Close bill popup
     document.getElementById("billPopup").classList.add("hidden");
 
-    // Reset table UI (ready for new check-in)
-    updateButtons(id, "idle");
-    updateDisplay(id);
+    // 🔥 UI UPDATE (IMPORTANT)
+    updateButtons(id, "afterCheckout");
+
+    printThermalBill(id);
 }
 
 
@@ -879,33 +821,33 @@ saveAfterCheckout();
  ******************************************************/
 async function openCanteen(id) {
 
-    const branch = BRANCH || "Rasson1";
+    let t = tables.find(x => String(x.id) === String(id));
 
-    const res = await fetch(
-        `https://snooker-backend-pmjj.onrender.com/api/inventory/${branch}`
-    );
+    if (!t) return;
 
-const items = await res.json();
+    // 🔥 TEMP DEMO ITEMS (jab tak Firebase inventory nahi banate)
+    // 🔥 FIREBASE INVENTORY LOAD
+;
 
-// 🔥 ADD THIS LINE (DEBUG)
-console.log("INVENTORY DATA:", items);
+let list = document.getElementById("canteenList");
+list.innerHTML = "";
 
-window.inventoryItems = items;
-
-    let list = document.getElementById("canteenList");
-    list.innerHTML = "";
-
-items.forEach(item => {
-
-    const name = getItemName(item);
-    const stock = getItemStock(item);
+inventoryItems.forEach(item => {
 
     list.innerHTML += `
         <div style="margin-bottom:10px;">
-            <b>${name}</b> - Rs ${item.price} (Stock: ${stock})
+            <b>${getItemName(item)}</b> - Rs ${item.selling_price || item.price || 0}
             <br>
-            <button onclick="addItem('${id}', ${item.id}, ${item.price})">➕</button>
-            <button onclick="removeItem('${id}', ${item.id}, ${item.price})">➖</button>
+            <small style="color:${getItemStock(item) <= 5 ? 'red' : 'lime'}">
+                Stock: ${getItemStock(item)}
+                ${getItemStock(item) <= 5 ? '⚠️ LOW' : ''}
+            </small>
+            <button 
+                ${getItemStock(item) <= 0 ? 'disabled style="opacity:0.3"' : ''}
+                onclick="addItem('${id}', '${item.id}', ${item.selling_price || item.price || 0}, '${getItemName(item)}')">
+                ➕
+            </button>
+            <button onclick="removeItem('${id}', '${item.id}', ${item.selling_price || item.price || 0}, '${getItemName(item)}')">➖</button>
         </div>
     `;
 });
@@ -916,83 +858,71 @@ items.forEach(item => {
         () => document.getElementById("canteenPopup").classList.add("hidden");
 }
 
-async function addItem(tableId, itemId, price) {
+async function addItem(tableId, itemId, price, name) {
 
-    let t = tables.find(x => x.id == tableId);
+    let t = tables.find(x => String(x.id) === String(tableId));
+    if (!t) return;
 
-    await fetch("https://snooker-backend-pmjj.onrender.com/api/inventory/use", {
-        method: "POST",
- headers: {
-  "Content-Type": "application/json",
-  "branch": BRANCH
-},
-        body: JSON.stringify({
-            table_id: tableId,
-            item_id: itemId
-        })
-    });
+    if (t.afterCheckout) return alert("Bill already closed");
 
-let item = window.inventoryItems.find(x => x.id == itemId);
+    // 🔥 GET ITEM FROM FIREBASE MEMORY
+    const item = inventoryItems.find(i => i.id === itemId);
 
-if (!item) {
-    alert("Item not found ❌");
-    return;
-}
-
-const name = getItemName(item);
-
-if (!t.canteenItems[itemId]) {
-    t.canteenItems[itemId] = {
-        name: name,
-        qty: 0,
-        price: price
-    };
-}
-
-t.canteenItems[itemId].qty += 1;
-t.canteenTotal += price;
-
-alert(name + " added ✅");
-
-updateDisplay(tableId);
-}
-
-async function removeItem(tableId, itemId, price) {
-
-    let t = tables.find(x => x.id == tableId);
-
-    await fetch("https://snooker-backend-pmjj.onrender.com/api/inventory/remove", {
-        method: "POST",
-  headers: {
-  "Content-Type": "application/json",
-  "branch": BRANCH
-},
-        body: JSON.stringify({
-            table_id: tableId,
-            item_id: itemId
-        })
-    });
-
-    // 🔥 item exist check
-    if (!t.canteenItems[itemId]) {
-        return alert("Item not added yet ❌");
+    // 🔥 STOCK CHECK
+    if (!item || getItemStock(item) <= 0) {
+        alert("Out of stock ❌");
+        return;
     }
 
-    // 🔥 quantity reduce
-    t.canteenItems[itemId].qty -= 1;
+    if (!t.canteenItems[itemId]) {
+        t.canteenItems[itemId] = { 
+    name: getItemName(item), 
+    qty: 0, 
+    price 
+};
+    }
 
-    // 🔥 agar 0 ho gaya to delete
+    t.canteenItems[itemId].qty += 1;
+    t.canteenTotal += price;
+
+    // 🔥 STOCK MINUS
+    await updateDoc(doc(window.db, "inventory", itemId), {
+        stock: increment(-1)
+    });
+
+    // 🔥 LOCAL UPDATE (IMPORTANT)
+    item.stock = Math.max(0, (item.stock || 0) - 1);
+
+    updateDisplay(tableId);
+    openCanteen(tableId);
+}
+
+async function removeItem(tableId, itemId, price, name) {
+
+    let t = tables.find(x => String(x.id) === String(tableId));
+    if (!t || !t.canteenItems[itemId]) return;
+
+    // 🔥 FREEZE LOCK
+    if (t.afterCheckout) return;
+
+    t.canteenItems[itemId].qty -= 1;
+    t.canteenTotal -= price;
+
     if (t.canteenItems[itemId].qty <= 0) {
         delete t.canteenItems[itemId];
     }
 
-    // 🔥 total update
-    t.canteenTotal = Math.max(t.canteenTotal - price, 0);
+    // 🔥 STOCK BACK FIREBASE
+    const itemRef = doc(window.db, "inventory", itemId);
 
-    alert("Item removed ❌");
+    await updateDoc(itemRef, {
+        stock: increment(1)
+    });
 
     updateDisplay(tableId);
+    openCanteen(tableId);
 }
+
 
 /******************************************************
  * EDIT TABLE POPUP
@@ -1012,19 +942,20 @@ function editTable(id) {
         document.getElementById("editTablePopup").classList.add("hidden");
 }
 
-function updateTable() {
+async function updateTable() {
+
     let t = tables.find(x => x.id === editTargetId);
 
     t.name = document.getElementById("editTableName").value.trim();
     t.frameRate = Number(document.getElementById("editFrameRate").value);
     t.centuryRate = Number(document.getElementById("editCenturyRate").value);
 
-    // 🔥 BACKEND SAVE (MISSING THA)
-    updateRate(
-        t.id,           // table_id
-        t.frameRate,      // frame
-        t.centuryRate     // century
-    );
+    // 🔥 FIREBASE UPDATE
+    await updateDoc(doc(window.db, "tables", editTargetId), {
+        table_id: t.name,
+        frame_rate: t.frameRate,
+        century_rate: t.centuryRate
+    });
 
     saveState();
     renderTables();
@@ -1044,7 +975,11 @@ function deleteTableOpen(id) {
         () => document.getElementById("deletePopup").classList.add("hidden");
 }
 
-function deleteTableConfirm() {
+async function deleteTableConfirm() {
+
+    // 🔥 FIREBASE DELETE
+    await deleteDoc(doc(window.db, "tables", deleteTargetId));
+
     tables = tables.filter(x => x.id !== deleteTargetId);
 
     saveState();
@@ -1111,63 +1046,112 @@ function openBillFromHistory(tableId, historyIndex) {
 
     let bill = document.getElementById("billDetails");
 
-    // canteen items
-    let canteenDetails = "";
-    let canteenTotal = 0;
+    
 
-    Object.values(h.canteenItems || {}).forEach(item => {
-        let total = item.qty * item.price;
-        canteenTotal += total;
+    const canteenItems = Object.values(h.canteenItems || {});
+document.getElementById("paidBtn").onclick = () => {
 
-        canteenDetails += `
-            <p style="margin:2px 0;">
-                ${item.name} &nbsp;&nbsp; ${item.qty}
-            </p>
-        `;
-    });
+    let t = tables.find(x => String(x.id) === String(tableId));
+    let h = t.history[historyIndex];
 
-    if (!canteenDetails) {
-        canteenDetails = `<p>No items</p>`;
-    }
+    // ✅ MARK PAID
+    h.paid = true;
 
-    bill.innerHTML = `
-    <div class="bill-print-box">
+    saveState();
 
-        <img src="../assets/bill-logo.png" style="width:200px;">
+    // ✅ CLOSE BILL
+    document.getElementById("billPopup").classList.add("hidden");
 
-        <p><b>${academy}</b></p>
-        <p>${branch}</p>
+    // ✅ 🔥 PRINT CORRECT HISTORY BILL
+    printThermalBill(tableId, h);
 
-        <hr>
+    // ✅ 🔥 INSTANT UI UPDATE (UNPAID → PAID)
+    openHistory(tableId);
+};
 
-        <p><b>${t.name}</b></p>
+// 🔥 CANTEEN LIST
+let canteenHTML = "";
+let canteenTotal = 0;
 
-        <hr>
+canteenItems.forEach(item => {
+    const total = item.qty * item.price;
+    canteenTotal += total;
 
-        <p>Check-in: ${checkin}</p>
-        <p>Checkout: ${checkout}</p>
-        <p>Play Time: ${playtime}</p>
-
-        <hr>
-
-        <p>Game: Rs ${h.amount}</p>
-        <p>Canteen: Rs ${canteenTotal}</p>
-
-        <hr>
-
-        <p><b>Total: Rs ${h.amount + canteenTotal}</b></p>
-
-        <hr>
-
-        <p><b>Canteen Items:</b></p>
-        ${canteenDetails}
-
-        <hr>
-
-        <p>Thanks for visit</p>
-
+    canteenHTML += `
+    <div style="display:flex; justify-content:space-between;">
+        <span>${item.name} x${item.qty}</span>
+        <span>${total}</span>
     </div>
     `;
+});
+
+if (!canteenHTML) canteenHTML = "<p>No items</p>";
+
+const gameAmount = h.amount || 0;
+const finalTotal = gameAmount + canteenTotal;
+
+bill.innerHTML = `
+<div style="width:300px; margin:auto; font-family:monospace; color:#000; background:#fff; padding:15px; border-radius:10px;">
+
+    <!-- 🔥 LOGO -->
+    <center>
+        <img src="../assets/bill-logo.png" style="width:120px;">
+        <h3 style="margin:5px 0;">${academy}</h3>
+        <small>${branch}</small>
+    </center>
+
+    <hr>
+
+    <!-- TABLE INFO -->
+    <p><b>Table:</b> ${t.name}</p>
+    <p><b>Check-in:</b> ${checkin}</p>
+    <p><b>Checkout:</b> ${checkout}</p>
+    <p><b>Play Time:</b> ${playtime}</p>
+
+    <hr>
+
+    <!-- 🔥 CANTEEN -->
+    <p><b>Canteen</b></p>
+    ${canteenHTML}
+
+    <div style="display:flex; justify-content:space-between;">
+        <b>Canteen Total</b>
+        <b>Rs ${canteenTotal}</b>
+    </div>
+
+    <hr>
+
+    <!-- 🔥 GAME -->
+    <div style="display:flex; justify-content:space-between;">
+        <span>Game Charges</span>
+        <span>Rs ${gameAmount}</span>
+    </div>
+
+    <hr>
+
+    <!-- 🔥 FINAL TOTAL -->
+    <div style="display:flex; justify-content:space-between; font-size:18px;">
+        <b>Total</b>
+        <b>Rs ${finalTotal}</b>
+    </div>
+
+    <hr>
+
+    <!-- 🔥 QR -->
+    <center>
+        <img src="../assets/QR-bill.png" style="width:100px;">
+        <br>
+        <small>Scan & Pay</small>
+    </center>
+
+    <hr>
+
+    <center>
+        <small>Thanks for visiting ❤️</small>
+    </center>
+
+</div>
+`;
 
     document.getElementById("billPopup").classList.remove("hidden");
 }
@@ -1187,11 +1171,33 @@ function openTableShift(id) {
     let sel = document.getElementById("shiftTableSelect");
     sel.innerHTML = "";
 
-    tables.forEach(tb => {
-        if (!tb.isRunning && tb.id !== id) {
-            sel.innerHTML += `<option value="${tb.id}">${tb.name}</option>`;
-        }
-    });
+    // ✅ SORT SAME LIKE UI (Tables first, then Rooms)
+const sortedTables = [...tables].sort((a, b) => {
+
+    const getType = (name) => {
+        if (name.toLowerCase().startsWith("table")) return 1;
+        if (name.toLowerCase().startsWith("room")) return 2;
+        return 3;
+    };
+
+    const typeA = getType(a.name);
+    const typeB = getType(b.name);
+
+    if (typeA !== typeB) return typeA - typeB;
+
+    const numA = parseInt(a.name.match(/\d+/)) || 0;
+    const numB = parseInt(b.name.match(/\d+/)) || 0;
+
+    return numA - numB;
+});
+
+
+// ✅ LOOP ON SORTED DATA
+sortedTables.forEach(tb => {
+    if (!tb.isRunning && tb.id !== id) {
+        sel.innerHTML += `<option value="${tb.id}">${tb.name}</option>`;
+    }
+});
 
     if (sel.innerHTML === "") {
         alert("No free tables available to shift.");
@@ -1210,40 +1216,60 @@ function openTableShift(id) {
 /******************************************************
  * SHIFT PLAYER TO NEW TABLE (MAIN LOGIC)
  ******************************************************/
-function shiftPlayerToNewTable() {
+async function shiftPlayerToNewTable() {
 
     let oldId = window._shiftSourceTable;
     let newId = document.getElementById("shiftTableSelect").value;
 
-    let oldT = tables.find(x => x.id === oldId);
-   let newT = tables.find(x => String(x.id) === String(newId));
+    let oldT = tables.find(x => String(x.id) === String(oldId));
+    let newT = tables.find(x => String(x.id) === String(newId));
 
-    // Move session to new table
+    if (!oldT || !newT) return;
+
+    // 🔥 MOVE SESSION (LOCAL)
     newT.isRunning = true;
     newT.checkinTime = oldT.checkinTime;
     newT.playSeconds = oldT.playSeconds;
     newT.liveAmount = oldT.liveAmount;
     newT.canteenTotal = oldT.canteenTotal;
-    newT.canteenItems = { ...oldT.canteenItems }; // ✅ FIX
-
-    
+    newT.canteenItems = { ...oldT.canteenItems };
 
     runTimer(newT.id);
 
-    // Reset old table
-
+    // 🔥 RESET OLD TABLE
     oldT.isRunning = false;
     oldT.checkinTime = null;
     oldT.checkoutTime = null;
     oldT.playSeconds = 0;
     oldT.liveAmount = 0;
     oldT.canteenTotal = 0;
-    oldT.canteenItems = {}; // ✅ FINAL FIX
+    oldT.canteenItems = {};
 
     saveState();
     renderTables();
 
     document.getElementById("shiftTablePopup").classList.add("hidden");
+
+    // 🔥 FIREBASE SYNC (IMPORTANT FIX)
+    try {
+        const q = query(
+            collection(window.db, "sessions"),
+            where("table_id", "==", oldT.name),
+            where("branch", "==", BRANCH),
+            where("end_time", "==", null)
+        );
+
+        const snap = await getDocs(q);
+
+        snap.forEach(async (d) => {
+            await updateDoc(doc(window.db, "sessions", d.id), {
+                table_id: newT.name
+            });
+        });
+
+    } catch (err) {
+        console.error("Shift Firebase error:", err);
+    }
 
     alert(`Shifted successfully to ${newT.name}`);
 }
@@ -1312,8 +1338,8 @@ function openShiftSummary() {
     }
 
 // Load frozen snapshots of shift1 & shift2
-let s1 = JSON.parse(localStorage.getItem("shift1") || "{}");
-let s2 = JSON.parse(localStorage.getItem("shift2") || "{}");
+let s1 = shift1 || {};
+let s2 = shift2 || {};
 
 // Build Combined summary by adding both shift values
 let combined = {
@@ -1381,12 +1407,17 @@ summaryBody.innerHTML = `
 /******************************************************
  * SHIFT 1 CLOSE (running tables allowed)
  ******************************************************/
-function closeShift1() {
+async function closeShift1() {
 
     let now = Date.now();
 
     // Start of shift1 = the moment the user closes shift1
-    let startMs = parseInt(localStorage.getItem("shift1Start") || now);
+    let startMs = parseInt(localStorage.getItem("shift1Start"));
+
+if (!startMs) {
+    startMs = now;
+    localStorage.setItem("shift1Start", startMs);
+}
 
     // Save this ONLY FIRST TIME
     localStorage.setItem("shift1Start", startMs);
@@ -1404,15 +1435,21 @@ function closeShift1() {
         ...snap
     };
 
-    localStorage.setItem("shift1", JSON.stringify(shift1));
+    
 
     document.getElementById("shiftCloseBtn").innerText = "Shift 2 Close";
     hidePopup("shiftSummaryPopup");
 
 // ✅ BACKEND SAVE
-sendToServer("https://snooker-backend-pmjj.onrender.com/api/shifts/close", {
+
+// 🔥 FIREBASE SAVE SHIFT 1
+await addDoc(collection(window.db, "shifts"), {
+    tables: tables.map(t => ({
+        table_id: t.name,
+        total: t.history.reduce((sum, h) => sum + (h.total || 0), 0)
+    })),
     shift_number: 1,
-    branch_code: BRANCH,
+    branch: BRANCH,
 
     open_time: shift1.openTime,
     close_time: shift1.closeTime,
@@ -1424,9 +1461,14 @@ sendToServer("https://snooker-backend-pmjj.onrender.com/api/shifts/close", {
     canteen_collection: snap.canteenCollection,
 
     expenses: snap.expenses,
-    closing_cash: snap.closingCash
-});
+    closing_cash: snap.closingCash,
 
+    created_at: new Date().toISOString()
+});
+// ✅ ADD THIS LINE (YAHAN)
+printShiftThermal("Shift 1 Summary", shift1);
+// ✅ CORRECT SAVE
+localStorage.setItem("shift1Data", JSON.stringify(shift1));
 }
 
 
@@ -1435,19 +1477,19 @@ sendToServer("https://snooker-backend-pmjj.onrender.com/api/shifts/close", {
 /******************************************************
  * SHIFT 2 CLOSE (no running tables allowed)
  ******************************************************/
-function closeShift2() {
+async function closeShift2() {
 
     // cannot close if any table still running
     let running = tables.some(t => t.isRunning);
     if (running) {
-        alert("Please checkout all tables before closing Shift 2!");
+        alert("Close all tables in Shift 2");
         return;
     }
 
     let now = Date.now();
 
     // Shift1 snapshot required
-    let s1 = JSON.parse(localStorage.getItem("shift1") || "{}");
+    let s1 = shift1 || {};
 
     let startMs = s1.endMs || 0;
     let endMs = now;
@@ -1463,15 +1505,21 @@ function closeShift2() {
         ...snap
     };
 
-    localStorage.setItem("shift2", JSON.stringify(shift2));
+    
 
     document.getElementById("shiftCloseBtn").innerText = "Day Close";
     hidePopup("shiftSummaryPopup");
 
 // ✅ BACKEND SAVE
-sendToServer("https://snooker-backend-pmjj.onrender.com/api/shifts/close", {
+
+// 🔥 FIREBASE SAVE SHIFT 2
+await addDoc(collection(window.db, "shifts"), {
+    tables: tables.map(t => ({
+        table_id: t.name,
+        total: t.history.reduce((sum, h) => sum + (h.total || 0), 0)
+    })),
     shift_number: 2,
-    branch_code: BRANCH,
+    branch: BRANCH,
 
     open_time: shift2.openTime,
     close_time: shift2.closeTime,
@@ -1483,8 +1531,14 @@ sendToServer("https://snooker-backend-pmjj.onrender.com/api/shifts/close", {
     canteen_collection: snap.canteenCollection,
 
     expenses: snap.expenses,
-    closing_cash: snap.closingCash
+    closing_cash: snap.closingCash,
+
+    created_at: new Date().toISOString()
 });
+
+// ✅ ADD THIS LINE
+printShiftThermal("Shift 2 Summary", shift2);
+localStorage.setItem("shift2Data", JSON.stringify(shift2));
 
 }
 
@@ -1493,11 +1547,11 @@ sendToServer("https://snooker-backend-pmjj.onrender.com/api/shifts/close", {
 /******************************************************
  * DAY CLOSE — RESET EVERYTHING + NEW DAY START
  ******************************************************/
-function closeDay() {
+async function closeDay() {
 
-    // LOAD SHIFT 1 & SHIFT 2 SNAPSHOTS
-    let s1 = JSON.parse(localStorage.getItem("shift1") || "null");
-    let s2 = JSON.parse(localStorage.getItem("shift2") || "null");
+   const today = new Date().toLocaleDateString("en-CA"); // ✅ FIX
+    let s1 = shift1;
+    let s2 = shift2;
 
     if (!s1 || !s2) {
         alert("Please close Shift 1 and Shift 2 before Day Close.");
@@ -1518,57 +1572,56 @@ function closeDay() {
         expenses: (s1.expenses || 0) + (s2.expenses || 0),
     };
 
-    // CLOSING CASH = TOTAL PAID – EXPENSES
     combined.closingCash =
         (combined.gameCollection + combined.canteenCollection) - combined.expenses;
 
-    // -------- SAVE INTO DAY HISTORY LIST ------------
-    let dayList = JSON.parse(localStorage.getItem("dayHistory") || "[]");
 
- let tableData = {};
+    // 🔥🔥🔥 STEP 1: SAVE SNAPSHOT BEFORE RESET (MAIN FIX)
+    const tablesSnapshot = tables.map(t => ({
+    table_id: t.name,
+    history: t.history.map(h => ({ ...h }))
+}));
 
-tables.forEach(t => {
 
-let t1 = getTableShiftTotalsFromDay(t, s1);
-let t2 = getTableShiftTotalsFromDay(t, s2);
+    // 🔥🔥🔥 STEP 2: FIREBASE SAVE (PEHLE SAVE KARO)
+    try {
 
-    tableData[String(t.id)] = {
-        shift1: t1,
-        shift2: t2
-    };
-});
+       
+// ==========================
+// 🔥 DUPLICATE SHIFT CHECK (ADD THIS)
+// ==========================
 
-dayList.push({
-    date: new Date().toLocaleDateString(),
+
+// 👉 identify shift (simple logic)
+
+
+await addDoc(collection(window.db, "days"), {
+    tables: tablesSnapshot,
+    date: today, // ✅ FIXED
+    branch: BRANCH,
+    shift: "day",
     shift1: s1,
     shift2: s2,
     combined: combined,
-    tables: tableData   // 🔥 THIS IS THE FIX
+    created_at: new Date().toISOString()
 });
 
-    localStorage.setItem("dayHistory", JSON.stringify(dayList));
+    // ✅ ADD THIS
+printShiftThermal("Day Summary", combined)
 
-    // -------- SAVE DATE RANGE INTO dayRanges ----------
-    let dayRanges = JSON.parse(localStorage.getItem("dayRanges") || "[]");
+} catch (err) {
+    alert("Error saving day data ❌");
+    return;
+}
 
-dayRanges.push({
-    start: s1.startMs,
-    end: s2.endMs
-});
 
-    localStorage.setItem("dayRanges", JSON.stringify(dayRanges));
-
-    // -------- RESET EVERYTHING FOR A NEW DAY ----------
-    localStorage.removeItem("shift1");
-    localStorage.removeItem("shift2");
+    // 🔥🔥🔥 STEP 3: AB RESET KARO (SAFE)
     localStorage.removeItem("dayStart");
     localStorage.setItem("currentDayId", Date.now());
     localStorage.setItem("dayStartTime", Date.now());
 
-
-    // RESET ALL TABLES
     tables.forEach(t => {
-        t.history = [];   // ✅ ADD THIS LINE
+        t.history = [];
         t.isRunning = false;
         t.checkinTime = null;
         t.checkoutTime = null;
@@ -1581,18 +1634,16 @@ dayRanges.push({
     saveState();
     renderTables();
 
-    // RESET SHIFT BUTTON
     document.getElementById("shiftCloseBtn").innerText = "Shift 1 Close";
 
-    hidePopup("shiftSummaryPopup");  
-    alert("Day Closed Successfully & Saved in Day History!");
+    hidePopup("shiftSummaryPopup");
 
-    // ✅ BACKEND DAY SAVE (EXACT JAGAH)
-sendToServer("https://snooker-backend-pmjj.onrender.com/api/day/close", {
-  date: new Date().toISOString().slice(0, 10),
-  branch: BRANCH
-});
-    
+    shift1 = null;
+    shift2 = null;
+
+    alert("Day Closed Successfully & Saved in Day History!");
+    localStorage.removeItem("shift1Data");
+localStorage.removeItem("shift2Data");
 }
 
 
@@ -1620,7 +1671,11 @@ function calculateShiftSnapshot(startTime, endTime) {
     tables.forEach(t => {
         t.history.forEach(h => {
 
-            if (h.checkin >= startTime && h.checkout <= endTime) {
+            if (
+    (h.checkin >= startTime && h.checkin <= endTime) ||
+    (h.checkout >= startTime && h.checkout <= endTime) ||
+    (h.checkin <= startTime && h.checkout >= endTime)
+) {
 
                 let g = Number(h.amount || 0);
                 let c = Number(h.canteenAmount || 0);
@@ -1640,7 +1695,7 @@ function calculateShiftSnapshot(startTime, endTime) {
     });
 
     // LOAD shift expenses
-    let expensesArr = JSON.parse(localStorage.getItem("expenses") || "[]");
+    
     let expenses = expensesArr
         .filter(e => e.time >= startTime && e.time <= endTime)
         .reduce((sum, e) => sum + Number(e.amount || 0), 0);
@@ -1670,127 +1725,199 @@ function bindHistoryButtons() {
     document.getElementById("cancelDayHistoryBtn").onclick =
         () => hidePopup("dayHistoryPopup");
 
-    document.getElementById("printDayHistoryBtn").onclick =
-        () => window.print();
+    document.getElementById("printDayHistoryBtn").onclick = () => {
+    let index = document.getElementById("dayHistoryDateSelect").selectedIndex;
+    let d = window._daysData[index];
+    if (d) printDayHistoryThermal(d);
+};
 
     // TABLE HISTORY
     document.getElementById("tableHistoryBtn").onclick = openTableHistory;
     document.getElementById("cancelTableHistoryBtn").onclick =
         () => hidePopup("tableHistoryPopup");
 
-    document.getElementById("printTableHistoryBtn").onclick =
-        () => window.print();
+    document.getElementById("printTableHistoryBtn").onclick = printTableHistoryThermal;
 }
 
 /******************************************************
  * 🟢 OPEN DAY HISTORY POPUP
  ******************************************************/
-function openDayHistory() {
+async function openDayHistory() {
+
+    const q = query(
+        collection(window.db, "days"),
+        where("branch", "==", BRANCH)
+    );
+
+    const snap = await getDocs(q);
 
     let sel = document.getElementById("dayHistoryDateSelect");
     sel.innerHTML = "";
 
-    dayRanges.forEach(r => {
-        let startDate = new Date(r.start);
-let endDate = new Date(r.end);
+    let days = [];
 
-// DATE
-let startDateStr = startDate.toLocaleDateString("en-GB");
-
-// TIME
-let startTimeStr = startDate.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit'
+    snap.forEach(doc => {
+    let d = doc.data();
+    days.push(d);
 });
 
-let endTimeStr = endDate.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit'
+// 🔥 SORT
+days.sort((a, b) => {
+    return new Date(b.created_at) - new Date(a.created_at);
 });
 
-// FINAL
-sel.innerHTML += `
+// 🔥 AB DROPDOWN BANAO
+days.forEach(d => {
+
+    let openTime = d.shift1?.startMs 
+        ? new Date(d.shift1.startMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+        : "-";
+
+    let closeTime = d.shift2?.endMs 
+        ? new Date(d.shift2.endMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+        : "-";
+
+    sel.innerHTML += `
 <option>
-${startDateStr} | ${startTimeStr} → ${endTimeStr}
+    ${d.date} (${openTime} → ${closeTime})
 </option>`;
-    });
+});
 
-    document.getElementById("dayHistoryBranch").innerText =
-        "Branch: " + (BRANCH || "Rasson1");
+    window._daysData = days;
 
-    loadDaySummary();
-    document.getElementById("dayHistoryDateSelect").onchange = loadDaySummary;
+    loadDaySummaryFirebase();
+
+    document.getElementById("dayHistoryDateSelect").onchange = loadDaySummaryFirebase;
 
     showPopup("dayHistoryPopup");
+}
+function loadDaySummaryFirebase() {
+
+    let index = document.getElementById("dayHistoryDateSelect").selectedIndex;
+    let d = window._daysData[index];
+
+    if (!d) return;
+
+    let s1 = d.shift1 || {};
+    let s2 = d.shift2 || {};
+    let c = d.combined || {};
+
+document.getElementById("dayShift1Body").innerHTML = `
+<tr>
+<td colspan="7">
+    <div class="summary-box">
+
+        <div class="summary-row">
+            <span>🎮 Game</span>
+            <span>${s1.gameTotal || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>🍔 Canteen</span>
+            <span>${s1.canteenTotal || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>💰 Game Collection</span>
+            <span>${s1.gameCollection || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>🧾 Canteen Collection</span>
+            <span>${s1.canteenCollection || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>⚖️ Balance</span>
+            <span>${(s1.gameBalance || 0) + (s1.canteenBalance || 0)}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>💸 Expenses</span>
+            <span>${s1.expenses || 0}</span>
+        </div>
+
+        <div class="summary-row total">
+            <span>💵 Cash</span>
+            <span>${s1.closingCash || 0}</span>
+        </div>
+
+    </div>
+</td>
+</tr>
+`;
+
+document.getElementById("dayShift2Body").innerHTML = `
+<tr>
+<td colspan="7">
+    <div class="summary-box">
+
+        <div class="summary-row">
+            <span>🎮 Game</span>
+            <span>${s2.gameTotal || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>🍔 Canteen</span>
+            <span>${s2.canteenTotal || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>💰 Game Collection</span>
+            <span>${s2.gameCollection || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>🧾 Canteen Collection</span>
+            <span>${s2.canteenCollection || 0}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>⚖️ Balance</span>
+            <span>${(s2.gameBalance || 0) + (s2.canteenBalance || 0)}</span>
+        </div>
+
+        <div class="summary-row">
+            <span>💸 Expenses</span>
+            <span>${s2.expenses || 0}</span>
+        </div>
+
+        <div class="summary-row total">
+            <span>💵 Cash</span>
+            <span>${s2.closingCash || 0}</span>
+        </div>
+
+    </div>
+</td>
+</tr>
+`;
+
+    document.getElementById("dayCombinedBody").innerHTML = `
+    <tr>
+        <td>${c.gameTotal || 0}</td>
+        <td>${c.canteenTotal || 0}</td>
+        <td>${c.gameCollection || 0}</td>
+        <td>${c.canteenCollection || 0}</td>
+        <td>${c.gameBalance || 0}</td>
+        <td>${c.canteenBalance || 0}</td>
+        <td>${c.expenses || 0}</td>
+        <td>${c.closingCash || 0}</td>
+
+        <!-- ✅ MAIN FIX -->
+        <td>
+    ${d.date}<br>
+    (${s1.startMs ? new Date(s1.startMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "-"}
+     →
+     ${s2.endMs ? new Date(s2.endMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : "-"})
+</td>
+    </tr>
+`;
 }
 
 /******************************************************
  * 🟢 BUILD DAY SUMMARY (SHIFT 1 + SHIFT 2 + COMBINED)
  ******************************************************/
-function loadDaySummary() {
 
-    let dayList = JSON.parse(localStorage.getItem("dayHistory") || "[]");
-
-    if (dayList.length === 0) {
-        document.getElementById("dayCombinedBody").innerHTML =
-            "<tr><td colspan='10'>No day history found</td></tr>";
-        return;
-    }
-
-    let select = document.getElementById("dayHistoryDateSelect");
-    let index = select.selectedIndex;
-
-    let selectedDay = dayList[index];
-
-    if (!selectedDay) return;
-
-    let s1 = selectedDay.shift1 || {};
-    let s2 = selectedDay.shift2 || {};
-    let c = selectedDay.combined || {};
-
-    // ✅ SHIFT 1
-    document.getElementById("dayShift1Body").innerHTML = `
-        <tr>
-            <td>${s1.gameTotal || 0}</td>
-            <td>${s1.canteenTotal || 0}</td>
-            <td>${s1.gameCollection || 0}</td>
-            <td>${s1.canteenCollection || 0}</td>
-            <td>${s1.gameBalance || 0}</td>
-            <td>${s1.canteenBalance || 0}</td>
-            <td>${s1.expenses || 0}</td>
-            <td>${s1.closingCash || 0}</td>
-        </tr>
-    `;
-
-    // ✅ SHIFT 2
-    document.getElementById("dayShift2Body").innerHTML = `
-        <tr>
-            <td>${s2.gameTotal || 0}</td>
-            <td>${s2.canteenTotal || 0}</td>
-            <td>${s2.gameCollection || 0}</td>
-            <td>${s2.canteenCollection || 0}</td>
-            <td>${s2.gameBalance || 0}</td>
-            <td>${s2.canteenBalance || 0}</td>
-            <td>${s2.expenses || 0}</td>
-            <td>${s2.closingCash || 0}</td>
-        </tr>
-    `;
-
-    // ✅ COMBINED
-    document.getElementById("dayCombinedBody").innerHTML = `
-        <tr>
-            <td>${c.gameTotal || 0}</td>
-            <td>${c.canteenTotal || 0}</td>
-            <td>${c.gameCollection || 0}</td>
-            <td>${c.canteenCollection || 0}</td>
-            <td>${c.gameBalance || 0}</td>
-            <td>${c.canteenBalance || 0}</td>
-            <td>${c.expenses || 0}</td>
-            <td>${c.closingCash || 0}</td>
-            <td>${selectedDay.date}</td>
-        </tr>
-    `;
-}
 
 /******************************************************
  * 🟢 BUILD A SINGLE SUMMARY ROW
@@ -1820,31 +1947,20 @@ function openTableHistory() {
     let dateSel = document.getElementById("tableHistoryDateSelect");
     dateSel.innerHTML = "";
 
-    dayRanges.forEach(r => {
-let startDate = new Date(r.start);
-let endDate = new Date(r.end);
+    // 🔥 Firebase day history use karo
+    (window._daysData || []).forEach((d, i) => {
+        let openTime = d.shift1?.startMs 
+    ? new Date(d.shift1.startMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+    : "-";
 
-// DATE FORMAT: 17/04/2026
-let startDateStr = startDate.toLocaleDateString("en-GB");
-let endDateStr = endDate.toLocaleDateString("en-GB");
+let closeTime = d.shift2?.endMs 
+    ? new Date(d.shift2.endMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+    : "-";
 
-// TIME FORMAT
-let startTimeStr = startDate.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit'
-});
-
-let endTimeStr = endDate.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit'
-});
-
-// FINAL DISPLAY
 dateSel.innerHTML += `
-<option value="${r.start}">
-${startDateStr} | ${startTimeStr} → ${endTimeStr}
-</option>
-`;
+<option value="${i}">
+    ${d.date} (${openTime} → ${closeTime})
+</option>`;
     });
 
     let tableSel = document.getElementById("tableHistoryTableSelect");
@@ -1853,16 +1969,14 @@ ${startDateStr} | ${startTimeStr} → ${endTimeStr}
         .join("");
 
     document.getElementById("tableHistoryBranch").innerText =
-    "Branch: " + (BRANCH || "Rasson1");
+        "Branch: " + (BRANCH || "Rasson1");
 
     loadSelectedTableHistory();
 
-
-
-
     showPopup("tableHistoryPopup");
+
     document.getElementById("tableHistoryDateSelect").onchange = loadSelectedTableHistory;
-document.getElementById("tableHistoryTableSelect").onchange = loadSelectedTableHistory;
+    document.getElementById("tableHistoryTableSelect").onchange = loadSelectedTableHistory;
 }
 
 /******************************************************
@@ -1875,29 +1989,68 @@ function loadSelectedTableHistory() {
 
     if (!t) return;
 
-let dayList = JSON.parse(localStorage.getItem("dayHistory") || "[]");
+
 let dayIndex = document.getElementById("tableHistoryDateSelect").selectedIndex;
-let selectedDay = dayList[dayIndex];
+
+if (!window._daysData || dayIndex < 0 || !window._daysData[dayIndex]) {
+    console.log("⚠️ No day data found");
+    return;
+}
+
+let selectedDay = window._daysData[dayIndex];
 
 if (!selectedDay) return;
 
-let t1 = selectedDay.tables?.[String(tableId)]?.shift1 || { time:0, game:0, canteen:0, total:0 };
-let t2 = selectedDay.tables?.[String(tableId)]?.shift2 || { time:0, game:0, canteen:0, total:0 };
-    document.getElementById("tableShift1Body").innerHTML =
-        buildTableHistoryRow(t, t1);
+// 🔥 find table from firebase day data
+let tableData = selectedDay.tables?.find(tb => tb.table_id === t.name);
 
-    document.getElementById("tableShift2Body").innerHTML =
-        buildTableHistoryRow(t, t2);
+// agar data na mile
+if (!tableData) {
+    document.getElementById("tableShift1Body").innerHTML = buildTableHistoryRow(t, {});
+    document.getElementById("tableShift2Body").innerHTML = buildTableHistoryRow(t, {});
+    document.getElementById("tableCombinedBody").innerHTML = buildTableHistoryRow(t, {});
+    return;
+}
+
+// 🔥 calculate from history
+let t1 = { time:0, game:0, canteen:0, total:0 };
+let t2 = { time:0, game:0, canteen:0, total:0 };
+
+// 👉 simple version (full day same data)
+let s1 = selectedDay.shift1;
+let s2 = selectedDay.shift2;
+
+// 🔥 SHIFT 1 CALC
+tableData.history.forEach(h => {
+    if (s1 && h.checkin >= s1.startMs && h.checkout <= s1.endMs) {
+        t1.time += h.playSeconds || 0;
+        t1.game += h.amount || 0;
+        t1.canteen += h.canteenAmount || 0;
+        t1.total += h.total || 0;
+    }
+});
+
+// 🔥 SHIFT 2 CALC
+tableData.history.forEach(h => {
+    if (s2 && h.checkin >= s2.startMs && h.checkout <= s2.endMs) {
+        t2.time += h.playSeconds || 0;
+        t2.game += h.amount || 0;
+        t2.canteen += h.canteenAmount || 0;
+        t2.total += h.total || 0;
+    }
+});
 
 let combined = {
-    time: (t1.time || 0) + (t2.time || 0),
-    game: (t1.game || 0) + (t2.game || 0),
-    canteen: (t1.canteen || 0) + (t2.canteen || 0),
-    total: (t1.total || 0) + (t2.total || 0)
+    time: t1.time + t2.time,
+    game: t1.game + t2.game,
+    canteen: t1.canteen + t2.canteen,
+    total: t1.total + t2.total
 };
 
-    document.getElementById("tableCombinedBody").innerHTML =
-        buildTableHistoryRow(t, combined);
+document.getElementById("tableShift1Body").innerHTML = buildTableHistoryRow(t, t1);
+document.getElementById("tableShift2Body").innerHTML = buildTableHistoryRow(t, t2);
+document.getElementById("tableCombinedBody").innerHTML = buildTableHistoryRow(t, combined);
+    
 }
 
 /******************************************************
@@ -1937,16 +2090,39 @@ function getTableShiftTotalsFromDay(t, shiftData) {
  ******************************************************/
 function buildTableHistoryRow(t, d) {
     return `
-        <tr>
-            <td>${t.name}</td>
-            <td>${formatSeconds(d.time || 0)}</td>
-            <td>${d.game || 0}</td>
-            <td>${d.canteen || 0}</td>
-            <td>${d.total || 0}</td>
-        </tr>
+    <tr>
+    <td colspan="4">
+        <div class="history-box">
+
+            <div class="history-title">
+                🎱 ${t.name}
+            </div>
+
+            <div class="history-row">
+                <span>⏱ Play Time</span>
+                <span>${formatSeconds(d.time || 0)}</span>
+            </div>
+
+            <div class="history-row">
+                <span>🎮 Game</span>
+                <span>${d.game || 0}</span>
+            </div>
+
+            <div class="history-row">
+                <span>🍔 Canteen</span>
+                <span>${d.canteen || 0}</span>
+            </div>
+
+            <div class="history-row total">
+                <span>💵 Total</span>
+                <span>${d.total || 0}</span>
+            </div>
+
+        </div>
+    </td>
+    </tr>
     `;
 }
-
 /******************************************************
  * TABLE HISTORY PAGINATION (FINAL FIX)
  ******************************************************/
@@ -2046,29 +2222,492 @@ else {
 // ===============================================
 // AUTO SYNC OFFLINE QUEUE EVERY 5 SEC
 // ===============================================
-async function syncPending() {
-    if (!navigator.onLine || pendingQueue.length === 0) return;
 
-    let copy = [...pendingQueue];
-    pendingQueue = [];
-    saveQueue();
 
-    for (let job of copy) {
-        try {
-            await fetch(job.url, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(job.data)
-            });
-        } catch (e) {
-            pendingQueue.push(job);
-        }
-    }
 
-    saveQueue();
+// ✅ FIX: HTML BUTTON ACCESS
+window.checkIn = checkIn;
+window.checkOut = checkOut;
+window.openHistory = openHistory;
+window.editTable = editTable;
+window.deleteTableOpen = deleteTableOpen;
+window.openCanteen = openCanteen;
+window.openTableShift = openTableShift;
+window.showBill = showBill;
+window.handleRateChange = handleRateChange;
+// 🔥 ADD THIS
+window.addItem = addItem;
+window.removeItem = removeItem;
+window.openBillFromHistory = openBillFromHistory;
+
+
+//thernal bill print 
+function printThermalBill(id, historyData = null) {
+
+    let t = tables.find(x => String(x.id) === String(id));
+let h = historyData;
+    if (!t) return;
+
+    let academy = "Rasson Snooker Academy";
+    let branch = BRANCH || "rasson1";
+
+    let checkin = h ? new Date(h.checkin).toLocaleTimeString() : (t.checkinTime ? formatTime(t.checkinTime) : "--");
+let checkout = h ? new Date(h.checkout).toLocaleTimeString() : (t.checkoutTime ? formatTime(t.checkoutTime) : "--");
+let playtime = h ? formatSeconds(h.playSeconds) : formatSeconds(t.finalSeconds || t.playSeconds);
+
+    let gameAmount = h ? h.amount : (t.finalAmount || t.liveAmount);
+
+    // 🔥 CANTEEN
+    let canteenHTML = "";
+    let canteenTotal = 0;
+
+    let itemsSource = h ? h.canteenItems : t.canteenItems;
+
+Object.values(itemsSource || {}).forEach(item => {
+        let total = item.qty * item.price;
+        canteenTotal += total;
+
+        canteenHTML += `
+        <div style="display:flex; justify-content:space-between;">
+            <span>${item.name} x${item.qty}</span>
+            <span>${total}</span>
+        </div>`;
+    });
+
+    if (!canteenHTML) canteenHTML = "<div>No items</div>";
+
+    let finalTotal = gameAmount + canteenTotal;
+
+    // 🔥 PRINT WINDOW
+    let win = window.open("", "", "width=300,height=600");
+
+    win.document.write(`
+    <html>
+    <head>
+        <title>Print</title>
+        <style>
+            body { font-family: monospace; width: 250px; margin: auto; }
+            .center { text-align:center; }
+            .row { display:flex; justify-content:space-between; }
+            hr { border:1px dashed #000; }
+        </style>
+    </head>
+    <body>
+
+        <div class="center">
+            <img src="../assets/bill-logo.png" width="80"><br>
+            <b>${academy}</b><br>
+            ${branch}
+        </div>
+
+        <hr>
+
+        <div>Table: ${t.name}</div>
+        <div>In: ${checkin}</div>
+        <div>Out: ${checkout}</div>
+        <div>Time: ${playtime}</div>
+
+        <hr>
+
+        <div><b>Game</b></div>
+        <div class="row"><span>Charges</span><span>${gameAmount}</span></div>
+
+        <hr>
+
+        <div><b>Canteen</b></div>
+        ${canteenHTML}
+
+        <div class="row"><b>Canteen Total</b><b>${canteenTotal}</b></div>
+
+        <hr>
+
+        <div class="row"><b>Total</b><b>${finalTotal}</b></div>
+
+        <hr>
+
+        <div class="center">
+            <img src="../assets/QR-bill.png" width="80"><br>
+            Scan & Pay
+        </div>
+
+        <hr>
+
+        <div class="center">Thank you ❤️</div>
+
+        <script>
+            window.onload = function() {
+                window.print();
+                window.close();
+            }
+        </script>
+
+    </body>
+    </html>
+    `);
+
+    win.document.close();
 }
 
-// Run sync every 5 seconds
-setInterval(syncPending, 5000);
+
+async function restoreRunningTables() {
+
+    const q = query(
+        collection(window.db, "sessions"),
+        where("branch", "==", BRANCH),
+        where("end_time", "==", null)
+    );
+
+    const snap = await getDocs(q);
+
+    snap.forEach(docSnap => {
+
+        const s = docSnap.data();
+
+        let t = tables.find(x => x.name === s.table_id);
+        if (!t) return;
+
+        let start = new Date(s.start_time).getTime();
+
+        // 🔥 FIX: if time is too old (more than 12 hours), ignore
+        let now = Date.now();
+        let diffHours = (now - start) / (1000 * 60 * 60);
+
+        if (diffHours > 12) {
+            console.log("⚠️ OLD SESSION IGNORED:", s);
+            return;
+        }
+
+        t.isRunning = true;
+t.checkinTime = start;
+
+// 🔥 IMPORTANT RESET
+t.afterCheckout = false;
+
+runTimer(t.id);
+    });
+
+    renderTables();
+}
 
 
+
+function listenRunningSessionsRealtime() {
+
+    const q = query(
+        collection(window.db, "sessions"),
+        where("branch", "==", BRANCH),
+        where("end_time", "==", null)
+    );
+
+    onSnapshot(q, (snapshot) => {
+
+        // 🔄 reset all tables first
+        let activeTables = new Set();
+
+snapshot.forEach(docSnap => {
+    const s = docSnap.data();
+    activeTables.add(s.table_id);
+});
+
+tables.forEach(t => {
+
+    // 🔥 AGAR CHECKOUT HO CHUKA HAI → TOUCH NA KARO
+    if (t.afterCheckout) return;
+
+    // 🔥 AGAR FIREBASE ME SESSION NA HO → STOP
+    if (!activeTables.has(t.name)) {
+        t.isRunning = false;
+        t.checkinTime = null;
+    }
+
+});
+        snapshot.forEach(docSnap => {
+
+            const s = docSnap.data();
+
+            let t = tables.find(x => x.name === s.table_id);
+            if (!t) return;
+
+            let start = new Date(s.start_time).getTime();
+
+            let now = Date.now();
+            let diffHours = (now - start) / (1000 * 60 * 60);
+
+            if (diffHours > 100) {
+                console.log("⚠️ OLD SESSION IGNORED:", s);
+                return;
+            }
+
+            // ❌ AGAR CHECKOUT HO CHUKA HAI TO IGNORE
+if (t.afterCheckout) return;
+
+t.isRunning = true;
+t.checkinTime = start;
+
+runTimer(t.id);
+        });
+
+        renderTables();
+
+// 🔥 BUTTON STATE FIX (VERY IMPORTANT)
+renderTables();
+
+// 🔥 FORCE STATE FROM SESSIONS
+setTimeout(() => {
+
+    tables.forEach(t => {
+
+        // 🔥 AGAR SESSION ACTIVE HAI → FORCE RUNNING
+        if (t.checkinTime && !t.afterCheckout) {
+            t.isRunning = true;
+        }
+
+        updateDisplay(t.id);
+
+        if (t.afterCheckout) {
+            updateButtons(t.id, "afterCheckout");
+        }
+        else if (t.isRunning) {
+            updateButtons(t.id, "running");
+        }
+        else {
+            updateButtons(t.id, "idle");
+        }
+
+    });
+
+}, 100);
+
+}); // ✅ YE MISSING THA
+
+} // function close
+
+
+function printShiftThermal(title, data) {
+
+    let win = window.open("", "", "width=300,height=600");
+
+    win.document.write(`
+    <html>
+    <head>
+        <title>Print</title>
+        <style>
+            body { font-family: monospace; width: 250px; margin:auto; }
+            .center { text-align:center; }
+            .row { display:flex; justify-content:space-between; }
+            hr { border:1px dashed #000; }
+        </style>
+    </head>
+    <body>
+
+        <div class="center">
+            <h3>${title}</h3>
+            <small>${BRANCH}</small>
+        </div>
+
+        <hr>
+
+        <div class="row"><span>Game Total</span><span>${data.gameTotal || 0}</span></div>
+        <div class="row"><span>Canteen</span><span>${data.canteenTotal || 0}</span></div>
+
+        <hr>
+
+        <div class="row"><span>Game Collection</span><span>${data.gameCollection || 0}</span></div>
+        <div class="row"><span>Canteen Collection</span><span>${data.canteenCollection || 0}</span></div>
+
+        <hr>
+
+        <div class="row"><span>Expenses</span><span>${data.expenses || 0}</span></div>
+
+        <hr>
+
+        <div class="row"><b>Closing Cash</b><b>${data.closingCash || 0}</b></div>
+
+        <hr>
+
+        <div class="center">
+            <small>${new Date().toLocaleString()}</small>
+        </div>
+
+        <script>
+            window.onload = function() {
+                window.print();
+                window.close();
+            }
+        </script>
+
+    </body>
+    </html>
+    `);
+
+    win.document.close();
+}
+
+/// dya history thermal print
+
+function printDayHistoryThermal(d) {
+
+    let s1 = d.shift1 || {};
+    let s2 = d.shift2 || {};
+    let c = d.combined || {};
+
+    let openTime = s1.startMs 
+        ? new Date(s1.startMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+        : "-";
+
+    let closeTime = s2.endMs 
+        ? new Date(s2.endMs).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) 
+        : "-";
+
+    let win = window.open("", "", "width=300,height=600");
+
+    win.document.write(`
+    <html>
+    <head>
+        <style>
+            body { font-family: monospace; width: 250px; margin:auto; }
+            .center { text-align:center; }
+            .row { display:flex; justify-content:space-between; }
+            hr { border:1px dashed #000; }
+        </style>
+    </head>
+    <body>
+
+    <div class="center">
+        <h3>Day History</h3>
+        <small>${BRANCH}</small>
+    </div>
+
+    <hr>
+
+    <div class="center">
+        ${d.date} <br>
+        (${openTime} → ${closeTime})
+    </div>
+
+    <hr>
+
+    <b>Shift 1</b>
+    <div class="row"><span>Game</span><span>${s1.gameTotal || 0}</span></div>
+    <div class="row"><span>Canteen</span><span>${s1.canteenTotal || 0}</span></div>
+    <div class="row"><span>Cash</span><span>${s1.closingCash || 0}</span></div>
+
+    <hr>
+
+    <b>Shift 2</b>
+    <div class="row"><span>Game</span><span>${s2.gameTotal || 0}</span></div>
+    <div class="row"><span>Canteen</span><span>${s2.canteenTotal || 0}</span></div>
+    <div class="row"><span>Cash</span><span>${s2.closingCash || 0}</span></div>
+
+    <hr>
+
+    <b>Combined</b>
+    <div class="row"><span>Game</span><span>${c.gameTotal || 0}</span></div>
+    <div class="row"><span>Canteen</span><span>${c.canteenTotal || 0}</span></div>
+    <div class="row"><span>Expenses</span><span>${c.expenses || 0}</span></div>
+
+    <hr>
+
+    <div class="row"><b>Final Cash</b><b>${c.closingCash || 0}</b></div>
+
+    <hr>
+
+    <div class="center">
+        ${new Date().toLocaleString()}
+    </div>
+
+    <script>
+        window.onload = function(){
+            window.print();
+            window.close();
+        }
+    </script>
+
+    </body>
+    </html>
+    `);
+
+    win.document.close();
+}
+
+/// table history thermal print
+
+function printTableHistoryThermal() {
+
+    let tableId = document.getElementById("tableHistoryTableSelect").value;
+    let t = tables.find(x => String(x.id) === String(tableId));
+
+    let dayIndex = document.getElementById("tableHistoryDateSelect").selectedIndex;
+    let d = window._daysData[dayIndex];
+
+    if (!t || !d) return;
+
+    let tableData = d.tables?.find(tb => tb.table_id === t.name);
+
+    let total = 0;
+    let game = 0;
+    let canteen = 0;
+    let time = 0;
+
+    (tableData?.history || []).forEach(h => {
+        total += h.total || 0;
+        game += h.amount || 0;
+        canteen += h.canteenAmount || 0;
+        time += h.playSeconds || 0;
+    });
+
+    let win = window.open("", "", "width=300,height=600");
+
+    win.document.write(`
+    <html>
+    <head>
+        <style>
+            body { font-family: monospace; width: 250px; margin:auto; }
+            .center { text-align:center; }
+            .row { display:flex; justify-content:space-between; }
+            hr { border:1px dashed #000; }
+        </style>
+    </head>
+    <body>
+
+    <div class="center">
+        <h3>Table History</h3>
+        <small>${BRANCH}</small>
+    </div>
+
+    <hr>
+
+    <div class="center">
+        ${t.name}<br>
+        ${d.date}
+    </div>
+
+    <hr>
+
+    <div class="row"><span>Play Time</span><span>${formatSeconds(time)}</span></div>
+    <div class="row"><span>Game</span><span>${game}</span></div>
+    <div class="row"><span>Canteen</span><span>${canteen}</span></div>
+
+    <hr>
+
+    <div class="row"><b>Total</b><b>${total}</b></div>
+
+    <hr>
+
+    <div class="center">
+        ${new Date().toLocaleString()}
+    </div>
+
+    <script>
+        window.onload = function(){
+            window.print();
+            window.close();
+        }
+    </script>
+
+    </body>
+    </html>
+    `);
+
+    win.document.close();
+}
