@@ -11,7 +11,8 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 import { increment } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-let expensesArr = JSON.parse(localStorage.getItem("expenses") || "[]");
+
+let firebaseExpenses = [];
 
 
 const BRANCH = localStorage.getItem("branch");
@@ -78,6 +79,11 @@ function saveState() {
  ******************************************************/
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // 🔥 ENSURE DAY ID ALWAYS EXISTS
+if (!localStorage.getItem("currentDayId")) {
+    localStorage.setItem("currentDayId", Date.now());
+}
+    listenExpensesRealtime();
     // 🔥 RESTORE SHIFT STATE
 let savedShift1 = localStorage.getItem("shift1Data");
 if (savedShift1) {
@@ -140,7 +146,7 @@ function listenTablesRealtime() {
     );
 
     onSnapshot(q, (snapshot) => {
-        let prevTables = [...tables]; // 🔥 ADD THIS LINE
+        
 
         let newTables = [];
 
@@ -173,39 +179,44 @@ function listenTablesRealtime() {
         });
 
         // 🔥 overwrite tables
-        tables = newTables.map(nt => {
 
-    let old = prevTables.find(o => String(o.id) === String(nt.id));
+    tables = newTables.map(nt => {
+
+    let old = tables.find(o => String(o.id) === String(nt.id));
 
     return {
         ...nt,
 
-        // 🔥 KEEP FIREBASE NAME
-        name: nt.name,
+        isRunning: old?.isRunning || false,
+        afterCheckout: old?.afterCheckout || false,
 
-        // 🔥 PRESERVE RUNNING STATE
-        // 🔥 DO NOT RESET RUNNING STATE FROM OLD
-isRunning: old?.isRunning ?? nt.isRunning ?? false,
-checkinTime: old?.checkinTime ?? nt.checkinTime ?? null,
-checkoutTime: old?.checkoutTime ?? nt.checkoutTime ?? null,
-playSeconds: old?.playSeconds ?? 0,
-liveAmount: old?.liveAmount ?? 0,
-        // 🔥 MOST IMPORTANT FIX
-        playType: old?.isRunning ? old.playType : nt.playType,
-        frameRate: old?.isRunning ? old.frameRate : nt.frameRate,
-        centuryRate: old?.isRunning ? old.centuryRate : nt.centuryRate,
+        checkinTime: old?.checkinTime || null,
+        checkoutTime: old?.checkoutTime || null,
 
-        // 🔥 KEEP CANTEEN + HISTORY
+        playSeconds: old?.playSeconds || 0,
+        liveAmount: old?.liveAmount || 0,
+
+        finalAmount: old?.finalAmount || 0,
+        finalSeconds: old?.finalSeconds || 0,
+
         canteenTotal: old?.canteenTotal || 0,
         canteenItems: old?.canteenItems || {},
-        history: old?.history || []
+
+        history: []
     };
 });
 
-        // 🔥 render UI
-        renderTables();
-    });
+setTimeout(async () => {
+
+    await rebuildHistoryFromSessions(); // 🔥 ADD THIS
+
+    renderTables();
+
+}, 100);
+});
 }
+
+
 
 // inventory load function
 async function loadInventory() {
@@ -229,6 +240,25 @@ async function loadInventory() {
     console.log("🔥 INVENTORY LOADED:", inventoryItems);
 }
 
+
+function listenExpensesRealtime() {
+
+    const q = query(
+        collection(window.db, "expenses"),
+        where("branch", "==", BRANCH)
+    );
+
+    onSnapshot(q, (snapshot) => {
+
+        firebaseExpenses = [];
+
+        snapshot.forEach(doc => {
+            firebaseExpenses.push(doc.data());
+        });
+
+        console.log("🔥 FIREBASE EXPENSES:", firebaseExpenses);
+    });
+}
 /******************************************************
  * ADD TABLE POPUP BINDING (FIX)
  ******************************************************/
@@ -449,6 +479,13 @@ async function checkIn(id) {
 
     if (t.isRunning) return;
 
+// 🔥 ADD THIS LOCK (EXACT YAHAIN)
+if (window._creatingSession) {
+    console.log("⛔ Session already creating...");
+    return;
+}
+window._creatingSession = true;
+
     t.isRunning = true;
     t.checkinTime = Date.now();
 
@@ -484,21 +521,36 @@ const snap = await getDocs(q);
 // 🔥 STEP 2: if exists → DO NOT create new
 if (!snap.empty) {
     console.log("⚠️ Session already exists, skipping new check-in");
+
+    // 🔥 FORCE UI FIX
+    t.isRunning = true;
+
+    window._creatingSession = false; // 🔥 IMPORTANT
     return;
 }
 
 // 🔥 STEP 3: create new session
-await addDoc(collection(window.db, "sessions"), {
-    table_id: t.name,
-    branch: BRANCH,
+try {
 
-    start_time: new Date().toISOString(),
-    end_time: null,
+    await addDoc(collection(window.db, "sessions"), {
+        table_id: t.name,
+        branch: BRANCH,
 
-    play_type: t.playType,
-    frame_rate: t.frameRate,
-    century_rate: t.centuryRate
-});
+        start_time: new Date().toISOString(),
+        end_time: null,
+
+        play_type: t.playType,
+        frame_rate: t.frameRate,
+        century_rate: t.centuryRate,
+        day_id: localStorage.getItem("currentDayId")
+    });
+
+} catch (err) {
+    console.error("❌ Session create error:", err);
+} finally {
+    // 🔥 LOCK RELEASE (VERY IMPORTANT)
+    window._creatingSession = false;
+}
 }
 
 
@@ -510,7 +562,6 @@ async function checkOut(id) {
 
     let t = tables.find(x => String(x.id) === String(id));
 
-    t.isRunning = false;
 
 // 🔥 FINAL FREEZE (IMPORTANT)
 t.afterCheckout = true;
@@ -538,22 +589,39 @@ t.finalAmount = t.liveAmount;   // ✅ ADD THIS HERE
 
     const snap = await getDocs(q);
 
-    snap.forEach(async (d) => {
-        await updateDoc(doc(window.db, "sessions", d.id), {
-    end_time: new Date().toISOString(),
+    let latestSession = null;
+let latestTime = 0;
 
-    // 🔥 FINAL BILL SAVE
-    final_amount: t.finalAmount,
-    final_seconds: t.finalSeconds,
-    canteen_total: t.canteenTotal
+snap.forEach(d => {
+    const data = d.data();
+
+    let time = new Date(data.start_time).getTime();
+
+    if (time > latestTime) {
+        latestTime = time;
+        latestSession = d;
+    }
 });
+
+if (latestSession) {
+    await updateDoc(doc(window.db, "sessions", latestSession.id), {
+        end_time: new Date().toISOString(),
+
+        final_amount: t.finalAmount,
+        final_seconds: t.finalSeconds,
+        canteen_total: t.canteenTotal,
+
+        paid: false,
+        day_id: localStorage.getItem("currentDayId")
     });
+}
 
     // 🔥 FINAL AMOUNT SAVE
     finalAmountMap[id] = t.finalAmount;
     saveFinalAmount();
 
     // 🔥 HISTORY SAVE (CORRECT PLACE)
+    if (!t.history) t.history = [];
     t.history.push({
         checkin: t.checkinTime,
         checkout: t.checkoutTime,
@@ -596,25 +664,38 @@ t.liveAmount = Math.ceil(t.playSeconds / 60) * rate;
  * UPDATE DISPLAY
  ******************************************************/
 function updateDisplay(id) {
+
     let t = tables.find(x => String(x.id) === String(id));
+    if (!t) return;
 
-    document.getElementById(`checkin-${id}`).innerText = t.checkinTime ? formatTime(t.checkinTime) : "--:--:--";
-    document.getElementById(`checkout-${id}`).innerText = t.checkoutTime ? formatTime(t.checkoutTime) : "--:--:--";
-    document.getElementById(`playtime-${id}`).innerText =
-    formatSeconds(t.afterCheckout ? t.finalSeconds : t.playSeconds);
+    // 🔥 SAFE ELEMENT GET
+    let checkinEl = document.getElementById(`checkin-${id}`);
+    let checkoutEl = document.getElementById(`checkout-${id}`);
+    let playtimeEl = document.getElementById(`playtime-${id}`);
+    let amountEl = document.getElementById(`amount-${id}`);
+    let canteenEl = document.getElementById(`canteen-items-${id}`);
+
+    // ❌ AGAR DOM READY NA HO → SKIP
+    if (!checkinEl || !checkoutEl || !playtimeEl || !amountEl) return;
+
+    checkinEl.innerText = t.checkinTime ? formatTime(t.checkinTime) : "--:--:--";
+    checkoutEl.innerText = t.checkoutTime ? formatTime(t.checkoutTime) : "--:--:--";
+
+    playtimeEl.innerText =
+        formatSeconds(t.afterCheckout ? t.finalSeconds : t.playSeconds);
+
     let amount = t.afterCheckout
-    ? (t.finalAmount + t.canteenTotal)
-    : (t.liveAmount + t.canteenTotal);
+        ? (t.finalAmount + t.canteenTotal)
+        : (t.liveAmount + t.canteenTotal);
 
-document.getElementById(`amount-${id}`).innerText = amount;
+    amountEl.innerText = amount;
+
     let itemsHTML = "";
+    Object.values(t.canteenItems).forEach(item => {
+        itemsHTML += `${item.name} x${item.qty}<br>`;
+    });
 
-Object.values(t.canteenItems).forEach(item => {
-    itemsHTML += `${item.name} x${item.qty}<br>`;
-});
-
-let el = document.getElementById(`canteen-items-${id}`);
-if (el) el.innerHTML = itemsHTML;
+    if (canteenEl) canteenEl.innerHTML = itemsHTML;
 }
 
 /******************************************************
@@ -794,7 +875,7 @@ async function showBill(id) {
         () => document.getElementById("billPopup").classList.add("hidden");
 }
 
-function completePayment(id) {
+async function completePayment(id) {
 
     let t = tables.find(x => String(x.id) === String(id));
     if (!t || !t.history.length) return;
@@ -802,6 +883,38 @@ function completePayment(id) {
     let last = t.history[t.history.length - 1];
 
     last.paid = true;
+
+// 🔥 FIREBASE UPDATE (MAIN FIX)
+// 🔥 GET ONLY LAST CLOSED SESSION
+const q = query(
+    collection(window.db, "sessions"),
+    where("table_id", "==", t.name),
+    where("branch", "==", BRANCH),
+    where("end_time", "!=", null)
+);
+
+// 🔥 ONLY LAST SESSION KO PAID KARO
+const snap = await getDocs(q);
+
+let latestSession = null;
+let latestTime = 0;
+
+snap.forEach(d => {
+    const data = d.data();
+
+    let time = new Date(data.end_time).getTime();
+
+    if (time > latestTime) {
+        latestTime = time;
+        latestSession = { id: d.id, ...data };
+    }
+});
+
+if (latestSession) {
+    await updateDoc(doc(window.db, "sessions", latestSession.id), {
+        paid: true
+    });
+}
 
     saveState();
 
@@ -1278,6 +1391,10 @@ async function shiftPlayerToNewTable() {
  ******************************************************/
 function bindShiftButtons() {
 
+    // 🔥 SHIFT START TRACKER
+if (!localStorage.getItem("shift1Start")) {
+    localStorage.setItem("shift1Start", Date.now());
+}
     document.getElementById("shiftCloseBtn").onclick = openShiftSummary;
 
     document.getElementById("confirmShiftCloseBtn").onclick = () => {
@@ -1412,12 +1529,7 @@ async function closeShift1() {
     let now = Date.now();
 
     // Start of shift1 = the moment the user closes shift1
-    let startMs = parseInt(localStorage.getItem("shift1Start"));
-
-if (!startMs) {
-    startMs = now;
-    localStorage.setItem("shift1Start", startMs);
-}
+    let startMs = parseInt(localStorage.getItem("shift1Start")) || now;
 
     // Save this ONLY FIRST TIME
     localStorage.setItem("shift1Start", startMs);
@@ -1465,8 +1577,7 @@ await addDoc(collection(window.db, "shifts"), {
 
     created_at: new Date().toISOString()
 });
-// ✅ ADD THIS LINE (YAHAN)
-printShiftThermal("Shift 1 Summary", shift1);
+alert("Shift 1 closed successfully ✅");
 // ✅ CORRECT SAVE
 localStorage.setItem("shift1Data", JSON.stringify(shift1));
 }
@@ -1536,8 +1647,7 @@ await addDoc(collection(window.db, "shifts"), {
     created_at: new Date().toISOString()
 });
 
-// ✅ ADD THIS LINE
-printShiftThermal("Shift 2 Summary", shift2);
+alert("Shift 2 closed successfully ✅");
 localStorage.setItem("shift2Data", JSON.stringify(shift2));
 
 }
@@ -1595,20 +1705,44 @@ async function closeDay() {
 // 👉 identify shift (simple logic)
 
 
+// 🔥 SAFE DATA CLEAN (VERY IMPORTANT)
+const safeShift1 = JSON.parse(JSON.stringify(s1 || {}));
+const safeShift2 = JSON.parse(JSON.stringify(s2 || {}));
+const safeTables = JSON.parse(JSON.stringify(tablesSnapshot || {}));
+const safeCombined = JSON.parse(JSON.stringify(combined || {}));
+
 await addDoc(collection(window.db, "days"), {
-    tables: tablesSnapshot,
-    date: today, // ✅ FIXED
+    tables: safeTables,
+    date: today,
     branch: BRANCH,
     shift: "day",
-    shift1: s1,
-    shift2: s2,
-    combined: combined,
+
+    shift1: safeShift1,
+    shift2: safeShift2,
+    combined: safeCombined,
+
     created_at: new Date().toISOString()
 });
 
-    // ✅ ADD THIS
-printShiftThermal("Day Summary", combined)
+// 🔥 FINAL SAFE DATA (DIRECT FROM SHIFT OBJECTS)
+let printData = {
+    gameTotal: (s1?.gameTotal || 0) + (s2?.gameTotal || 0),
+    canteenTotal: (s1?.canteenTotal || 0) + (s2?.canteenTotal || 0),
 
+    gameCollection: (s1?.gameCollection || 0) + (s2?.gameCollection || 0),
+    canteenCollection: (s1?.canteenCollection || 0) + (s2?.canteenCollection || 0),
+
+    expenses: (s1?.expenses || 0) + (s2?.expenses || 0)
+};
+
+printData.closingCash =
+    (printData.gameCollection + printData.canteenCollection) - printData.expenses;
+
+// 🔥 DEBUG (optional)
+console.log("🔥 DAY PRINT DATA:", printData);
+
+// 🔥 PRINT
+printShiftThermal("Day Summary", printData, shift1, shift2);
 } catch (err) {
     alert("Error saving day data ❌");
     return;
@@ -1642,6 +1776,7 @@ printShiftThermal("Day Summary", combined)
     shift2 = null;
 
     alert("Day Closed Successfully & Saved in Day History!");
+    localStorage.removeItem("shift1Start");
     localStorage.removeItem("shift1Data");
 localStorage.removeItem("shift2Data");
 }
@@ -1696,9 +1831,12 @@ function calculateShiftSnapshot(startTime, endTime) {
 
     // LOAD shift expenses
     
-    let expenses = expensesArr
-        .filter(e => e.time >= startTime && e.time <= endTime)
-        .reduce((sum, e) => sum + Number(e.amount || 0), 0);
+    let expenses = firebaseExpenses
+    .filter(e => {
+        let time = new Date(e.created_at).getTime();
+        return time >= startTime && time <= endTime;
+    })
+    .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
     let closingCash = (gameCollection + canteenCollection) - expenses;
 
@@ -2393,6 +2531,7 @@ runTimer(t.id);
 
 function listenRunningSessionsRealtime() {
 
+
     const q = query(
         collection(window.db, "sessions"),
         where("branch", "==", BRANCH),
@@ -2415,10 +2554,7 @@ tables.forEach(t => {
     if (t.afterCheckout) return;
 
     // 🔥 AGAR FIREBASE ME SESSION NA HO → STOP
-    if (!activeTables.has(t.name)) {
-        t.isRunning = false;
-        t.checkinTime = null;
-    }
+    t.isRunning = activeTables.has(t.name);
 
 });
         snapshot.forEach(docSnap => {
@@ -2449,18 +2585,17 @@ runTimer(t.id);
 
         renderTables();
 
-// 🔥 BUTTON STATE FIX (VERY IMPORTANT)
-renderTables();
-
 // 🔥 FORCE STATE FROM SESSIONS
 setTimeout(() => {
 
     tables.forEach(t => {
 
         // 🔥 AGAR SESSION ACTIVE HAI → FORCE RUNNING
-        if (t.checkinTime && !t.afterCheckout) {
-            t.isRunning = true;
-        }
+        if (activeTables.has(t.name)) {
+    t.isRunning = true;
+} else {
+    t.isRunning = false;
+}
 
         updateDisplay(t.id);
 
@@ -2479,15 +2614,25 @@ setTimeout(() => {
 }, 100);
 
 }); // ✅ YE MISSING THA
+}
 
-} // function close
 
 
-function printShiftThermal(title, data) {
+function printShiftThermal(title, data, s1 = {}, s2 = {}) {
 
-    let win = window.open("", "", "width=300,height=600");
+    if (!data) {
+        alert("No data to print ❌");
+        return;
+    }
 
-    win.document.write(`
+    let win = window.open("", "_blank", "width=300,height=600");
+
+    if (!win) {
+        alert("Popup blocked ❌");
+        return;
+    }
+
+    let html = `
     <html>
     <head>
         <title>Print</title>
@@ -2496,6 +2641,7 @@ function printShiftThermal(title, data) {
             .center { text-align:center; }
             .row { display:flex; justify-content:space-between; }
             hr { border:1px dashed #000; }
+            .small { font-size:12px; }
         </style>
     </head>
     <body>
@@ -2503,6 +2649,26 @@ function printShiftThermal(title, data) {
         <div class="center">
             <h3>${title}</h3>
             <small>${BRANCH}</small>
+        </div>
+
+        <hr>
+
+        <div>
+            <b>Shift 1</b><br>
+            <span class="small">
+                ${s1.openTime || "-"} <br>
+                → ${s1.closeTime || "-"}
+            </span>
+        </div>
+
+        <hr>
+
+        <div>
+            <b>Shift 2</b><br>
+            <span class="small">
+                ${s2.openTime || "-"} <br>
+                → ${s2.closeTime || "-"}
+            </span>
         </div>
 
         <hr>
@@ -2526,24 +2692,32 @@ function printShiftThermal(title, data) {
         <hr>
 
         <div class="center">
-            <small>${new Date().toLocaleString()}</small>
+            ${new Date().toLocaleString()}
         </div>
-
-        <script>
-            window.onload = function() {
-                window.print();
-                window.close();
-            }
-        </script>
 
     </body>
     </html>
-    `);
+    `;
 
+    win.document.open();
+    win.document.write(html);
     win.document.close();
+
+    let checkReady = setInterval(() => {
+        if (win.document.readyState === "complete") {
+            clearInterval(checkReady);
+
+            win.focus();
+
+            setTimeout(() => {
+                win.print();
+                win.close();
+            }, 300);
+        }
+    }, 50);
 }
 
-/// dya history thermal print
+/// day history thermal print
 
 function printDayHistoryThermal(d) {
 
@@ -2615,13 +2789,6 @@ function printDayHistoryThermal(d) {
     <div class="center">
         ${new Date().toLocaleString()}
     </div>
-
-    <script>
-        window.onload = function(){
-            window.print();
-            window.close();
-        }
-    </script>
 
     </body>
     </html>
@@ -2698,16 +2865,65 @@ function printTableHistoryThermal() {
         ${new Date().toLocaleString()}
     </div>
 
-    <script>
-        window.onload = function(){
-            window.print();
-            window.close();
-        }
-    </script>
+    
 
     </body>
     </html>
     `);
 
     win.document.close();
+}
+
+async function rebuildHistoryFromSessions() {
+
+    const q = query(
+        collection(window.db, "sessions"),
+        where("branch", "==", BRANCH)
+    );
+
+    const snap = await getDocs(q);
+
+    // 🔥 TODAY FILTER
+    // 🔥 FIXED (LOCAL DAY SAFE)
+let now = new Date();
+
+let startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+    0, 0, 0, 0
+).getTime();
+
+    // 🔥 RESET
+    tables.forEach(t => t.history = []);
+
+    snap.forEach(docSnap => {
+
+        const s = docSnap.data();
+
+        // ❌ ignore running
+        if (!s.end_time) return;
+
+        // ✅ ONLY CURRENT DAY (REAL FIX)
+        const currentDayId = localStorage.getItem("currentDayId");
+
+if (!s.day_id || String(s.day_id) !== String(currentDayId)) return;
+
+        let t = tables.find(x => x.name === s.table_id);
+        if (!t) return;
+
+        t.history.push({
+            checkin: new Date(s.start_time).getTime(),
+            checkout: new Date(s.end_time).getTime(),
+            playSeconds: s.final_seconds || 0,
+            amount: s.final_amount || 0,
+            canteenAmount: s.canteen_total || 0,
+            total: (s.final_amount || 0) + (s.canteen_total || 0),
+            paid: s.paid === true,
+            rate: s.play_type === "century" ? s.century_rate : s.frame_rate,
+            canteenItems: {}
+        });
+    });
+
+    console.log("🔥 ONLY TODAY HISTORY LOADED");
 }
